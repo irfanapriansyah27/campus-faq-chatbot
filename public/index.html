@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Demo chatbot FAQ kampus dengan pengalihan ke customer service.">
+  <title>Campus FAQ Chatbot</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="page-shell">
+    <section class="intro">
+      <p class="eyebrow">Demo layanan informasi kampus</p>
+      <h1>Chatbot FAQ Kampus</h1>
+      <p>Ajukan pertanyaan mengenai layanan kampus. Jika informasi belum tersedia, percakapan akan diarahkan kepada petugas.</p>
+    </section>
+
+    <section class="chat" aria-label="Chatbot FAQ">
+      <header class="chat__header">
+        <span class="status-dot" aria-hidden="true"></span>
+        <div>
+          <strong>Asisten Kampus</strong>
+          <small>FAQ otomatis • CS saat diperlukan</small>
+        </div>
+      </header>
+
+      <div id="messages" class="chat__messages" aria-live="polite">
+        <div class="message message--bot">Halo! Ada informasi kampus yang ingin Anda tanyakan?</div>
+      </div>
+
+      <button id="handoff-button" class="handoff-button" type="button" hidden>
+        Hubungi customer service
+      </button>
+
+      <form id="chat-form" class="chat__form">
+        <label class="sr-only" for="message-input">Pertanyaan</label>
+        <input id="message-input" name="message" maxlength="2000" autocomplete="off" placeholder="Ketik pertanyaan Anda..." required>
+        <button type="submit">Kirim</button>
+      </form>
+    </section>
+  </main>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>
+

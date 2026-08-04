@@ -1,0 +1,52 @@
+[
+  {
+    "faq_key": "pendaftaran-mahasiswa-baru",
+    "question": "Bagaimana cara mendaftar sebagai mahasiswa baru?",
+    "answer": "Pendaftaran mahasiswa baru dilakukan melalui portal penerimaan resmi kampus. Calon mahasiswa perlu membuat akun, melengkapi data, mengunggah dokumen yang diminta, dan mengikuti tahapan seleksi yang tercantum pada portal tersebut.",
+    "category": "penerimaan",
+    "source": "contoh-faq",
+    "metadata": {
+      "tags": ["pendaftaran", "mahasiswa baru", "PMB"],
+      "note": "Ganti dengan URL dan prosedur resmi kampus sebelum dipublikasikan."
+    },
+    "status": "published",
+    "version": 1
+  },
+  {
+    "faq_key": "jadwal-perkuliahan",
+    "question": "Di mana mahasiswa dapat melihat jadwal perkuliahan?",
+    "answer": "Jadwal perkuliahan dapat dilihat melalui sistem informasi akademik kampus menggunakan akun mahasiswa. Jika jadwal belum muncul atau terdapat ketidaksesuaian, mahasiswa perlu menghubungi bagian akademik.",
+    "category": "akademik",
+    "source": "contoh-faq",
+    "metadata": {
+      "tags": ["jadwal", "kuliah", "akademik"]
+    },
+    "status": "published",
+    "version": 1
+  },
+  {
+    "faq_key": "lupa-password-akademik",
+    "question": "Apa yang harus dilakukan jika lupa password sistem akademik?",
+    "answer": "Gunakan menu lupa password pada halaman masuk sistem akademik. Apabila pemulihan mandiri tidak berhasil, hubungi helpdesk kampus dengan menyiapkan identitas mahasiswa untuk proses verifikasi.",
+    "category": "akun",
+    "source": "contoh-faq",
+    "metadata": {
+      "tags": ["password", "akun", "login"]
+    },
+    "status": "published",
+    "version": 1
+  },
+  {
+    "faq_key": "pembayaran-kuliah",
+    "question": "Bagaimana cara melihat informasi pembayaran kuliah?",
+    "answer": "Informasi tagihan dan status pembayaran kuliah tersedia pada sistem informasi akademik atau kanal pembayaran resmi kampus. Untuk perbedaan nominal atau status pembayaran, mahasiswa perlu menghubungi bagian keuangan.",
+    "category": "keuangan",
+    "source": "contoh-faq",
+    "metadata": {
+      "tags": ["pembayaran", "tagihan", "keuangan"]
+    },
+    "status": "published",
+    "version": 1
+  }
+]
+
