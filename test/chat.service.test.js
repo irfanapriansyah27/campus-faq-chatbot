@@ -67,18 +67,23 @@ test('mengembalikan jawaban LLM yang memiliki faq_id terverifikasi', async () =>
   assert.equal(result.sources[0].faq_id, match.id);
 });
 
-test('menggunakan jawaban FAQ asli jika format LLM tidak valid', async () => {
+test('melakukan handoff jika format LLM tidak valid', async () => {
   const service = createService({
     matches: [match],
     llmResponse: 'Jawaban biasa tanpa JSON.'
   });
-  const result = await service.answer({ message: 'Jadwal kuliah?' });
 
-  assert.equal(result.mode, 'CANONICAL_FAQ_FALLBACK');
-  assert.equal(result.answer, match.answer);
+  const result = await service.answer({
+    message: 'Jadwal kuliah?'
+  });
+
+  assert.equal(result.decision, 'HANDOFF');
+  assert.equal(result.answer, fallbackMessage);
+  assert.equal(result.handoff.provider, 'tawk.to');
+  assert.equal(result.handoff.reason, 'LLM_RESPONSE_INVALID');
 });
 
-test('menggunakan jawaban FAQ asli jika LLM mencantumkan sumber palsu', async () => {
+test('melakukan handoff jika LLM mencantumkan sumber palsu', async () => {
   const service = createService({
     matches: [match],
     llmResponse: JSON.stringify({
@@ -88,10 +93,15 @@ test('menggunakan jawaban FAQ asli jika LLM mencantumkan sumber palsu', async ()
       confidence: 'high'
     })
   });
-  const result = await service.answer({ message: 'Jadwal kuliah?' });
 
-  assert.equal(result.mode, 'UNVERIFIED_CITATION_FALLBACK');
-  assert.equal(result.answer, match.answer);
+  const result = await service.answer({
+    message: 'Jadwal kuliah?'
+  });
+
+  assert.equal(result.decision, 'HANDOFF');
+  assert.equal(result.answer, fallbackMessage);
+  assert.equal(result.handoff.provider, 'tawk.to');
+  assert.equal(result.handoff.reason, 'UNVERIFIED_LLM_CITATION');
 });
 
 test('melakukan handoff ketika LLM menilai konteks tidak cukup', async () => {
@@ -110,13 +120,18 @@ test('melakukan handoff ketika LLM menilai konteks tidak cukup', async () => {
   assert.equal(result.handoff.reason, 'LLM_CONTEXT_INSUFFICIENT');
 });
 
-test('tetap menjawab dari FAQ asli ketika provider generasi gagal', async () => {
+test('melakukan handoff jika provider generasi gagal', async () => {
   const service = createService({
     matches: [match],
     llmError: new Error('quota habis')
   });
-  const result = await service.answer({ message: 'Jadwal kuliah?' });
 
-  assert.equal(result.decision, 'ANSWER');
-  assert.equal(result.mode, 'CANONICAL_FAQ_FALLBACK');
+  const result = await service.answer({
+    message: 'Jadwal kuliah?'
+  });
+
+  assert.equal(result.decision, 'HANDOFF');
+  assert.equal(result.answer, fallbackMessage);
+  assert.equal(result.handoff.provider, 'tawk.to');
+  assert.equal(result.handoff.reason, 'LLM_SERVICE_UNAVAILABLE');
 });

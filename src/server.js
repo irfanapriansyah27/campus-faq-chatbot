@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { createApp } from './app.js';
+import { createApp } from './app.factory.js';
 import { loadConfig } from './config/env.js';
 import { SupabaseFaqRepository } from './repositories/supabase-faq.repository.js';
 import { ChatService } from './services/chat.service.js';
