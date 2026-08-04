@@ -28,7 +28,7 @@ flowchart TD
 ## Verifikasi dua langkah
 
 1. `match_faq` hanya mengembalikan FAQ `published` yang mencapai threshold.
-2. LLM generatif wajib mengembalikan `faq_ids` yang termasuk dalam hasil retrieval. ID yang tidak dikenal menyebabkan backend memakai jawaban FAQ asli.
+2. LLM generatif wajib mengembalikan `faq_ids` yang termasuk dalam hasil retrieval. ID yang tidak dikenal menyebabkan backend mengembalikan `HANDOFF` dengan alasan `UNVERIFIED_LLM_CITATION`.
 
 Gemini menggunakan `RETRIEVAL_DOCUMENT` saat ingestion dan `RETRIEVAL_QUERY` saat pertanyaan visitor diproses. Seluruh FAQ harus dibuat dengan model dan dimensi yang sama.
 
