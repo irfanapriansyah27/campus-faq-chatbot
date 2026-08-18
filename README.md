@@ -37,7 +37,7 @@ flowchart TD
 Alur pemrosesan terdiri dari dua pemeriksaan:
 
 1. Supabase hanya mengembalikan FAQ berstatus `published` dengan cosine similarity yang mencapai `MATCH_THRESHOLD`.
-2. LLM wajib mengembalikan JSON valid dan mengutip minimal satu `faq_id` yang terdapat pada hasil retrieval. Kutipan yang tidak dikenal tidak diteruskan kepada visitor.
+2. LLM wajib mengembalikan tepat satu object JSON valid. Untuk keputusan `ANSWER`, seluruh `faq_id` harus unik, berformat UUID, dan terdapat pada hasil retrieval; satu ID yang tidak valid atau tidak dikenal menyebabkan `HANDOFF`.
 
 Jika salah satu pemeriksaan gagal, backend mengembalikan `HANDOFF`. Ketika tidak ada FAQ yang relevan, model generatif tidak dipanggil.
 
@@ -318,6 +318,7 @@ URL preview Vercel memiliki origin berbeda dari domain produksi dan akan ditolak
 - Endpoint admin menggunakan perbandingan constant-time terhadap `ADMIN_INGEST_KEY`.
 - API menggunakan Helmet, allowlist CORS, validasi Zod, batas request JSON 1 MB, dan rate limit pada endpoint chat.
 - Riwayat percakapan tidak disimpan oleh backend; browser hanya mengirim bagian terakhir dari riwayat aktif.
+- Riwayat dari client tetap diperlakukan sebagai input tidak tepercaya. Validasi role, panjang, dan format tidak membuktikan bahwa isi atau urutan history autentik.
 - Test otomatis tidak mengukur ketersediaan, kuota, latensi, maupun perubahan kebijakan provider eksternal.
 - Sistem belum menyediakan dashboard admin, audit log perubahan FAQ, analitik percakapan, atau sinkronisasi transkrip tawk.to.
 - Threshold `0.65` telah digunakan pada demonstrasi, tetapi tetap perlu dievaluasi ulang menggunakan variasi pertanyaan dan FAQ resmi kampus.

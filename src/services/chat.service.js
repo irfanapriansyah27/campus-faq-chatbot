@@ -1,5 +1,5 @@
 import { buildGroundedMessages } from '../prompts/faq-answer.prompt.js';
-import { parseLlmAnswer } from '../utils/llm-json.js';
+import { validateLlmAnswer } from '../utils/llm-json.js';
 
 export class ChatService {
   constructor({
@@ -52,27 +52,36 @@ export class ChatService {
       history: safeHistory
     });
 
-    let parsed;
+    let rawAnswer;
 
     try {
-      const rawAnswer = await this.llmService.createChatCompletion(messages);
-      parsed = parseLlmAnswer(rawAnswer);
+      rawAnswer = await this.llmService.createChatCompletion(messages);
     } catch {
       return this.handoff('LLM_SERVICE_UNAVAILABLE');
     }
 
-    if (!parsed) {
-      return this.handoff('LLM_RESPONSE_INVALID');
+    const validation = validateLlmAnswer(rawAnswer, {
+      maxFaqIds: this.matchCount
+    });
+
+    if (!validation.success) {
+      return this.handoff(
+        validation.reason === 'CITATION'
+          ? 'UNVERIFIED_LLM_CITATION'
+          : 'LLM_RESPONSE_INVALID'
+      );
     }
+
+    const parsed = validation.data;
 
     if (parsed.decision === 'HANDOFF') {
       return this.handoff('LLM_CONTEXT_INSUFFICIENT');
     }
 
     const allowedIds = new Set(matches.map((match) => String(match.id)));
-    const citedIds = parsed.faq_ids.filter((id) => allowedIds.has(String(id)));
+    const citedIds = parsed.faq_ids.map(String);
 
-    if (citedIds.length === 0) {
+    if (citedIds.some((id) => !allowedIds.has(id))) {
       return this.handoff('UNVERIFIED_LLM_CITATION');
     }
 

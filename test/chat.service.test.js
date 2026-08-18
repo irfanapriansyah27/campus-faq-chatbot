@@ -41,6 +41,14 @@ const match = {
   similarity: 0.82
 };
 
+const secondMatch = {
+  id: '33333333-3333-4333-8333-333333333333',
+  question: 'Bagaimana mengunduh kartu studi?',
+  answer: 'Kartu studi tersedia di sistem akademik.',
+  category: 'akademik',
+  similarity: 0.78
+};
+
 test('melakukan handoff ketika tidak ada FAQ yang melewati threshold', async () => {
   const service = createService();
   const result = await service.answer({ message: 'Apakah ada kelas renang?' });
@@ -65,6 +73,23 @@ test('mengembalikan jawaban LLM yang memiliki faq_id terverifikasi', async () =>
   assert.equal(result.decision, 'ANSWER');
   assert.equal(result.mode, 'GROUNDED_LLM');
   assert.equal(result.sources[0].faq_id, match.id);
+});
+
+test('mengembalikan jawaban jika seluruh faq_id terdapat pada hasil retrieval', async () => {
+  const service = createService({
+    matches: [match, secondMatch],
+    llmResponse: JSON.stringify({
+      decision: 'ANSWER',
+      answer: 'Jadwal dan kartu studi tersedia di sistem akademik kampus.',
+      faq_ids: [match.id, secondMatch.id],
+      confidence: 'high'
+    })
+  });
+
+  const result = await service.answer({ message: 'Di mana jadwal dan kartu studi?' });
+
+  assert.equal(result.decision, 'ANSWER');
+  assert.deepEqual(result.sources.map((source) => source.faq_id), [match.id, secondMatch.id]);
 });
 
 test('melakukan handoff jika format LLM tidak valid', async () => {
@@ -101,6 +126,74 @@ test('melakukan handoff jika LLM mencantumkan sumber palsu', async () => {
   assert.equal(result.decision, 'HANDOFF');
   assert.equal(result.answer, fallbackMessage);
   assert.equal(result.handoff.provider, 'tawk.to');
+  assert.equal(result.handoff.reason, 'UNVERIFIED_LLM_CITATION');
+});
+
+test('melakukan handoff jika LLM mencampur faq_id valid dan palsu', async () => {
+  const service = createService({
+    matches: [match],
+    llmResponse: JSON.stringify({
+      decision: 'ANSWER',
+      answer: 'Jawaban dengan sitasi campuran.',
+      faq_ids: [match.id, '22222222-2222-4222-8222-222222222222'],
+      confidence: 'high'
+    })
+  });
+
+  const result = await service.answer({ message: 'Jadwal kuliah?' });
+
+  assert.equal(result.decision, 'HANDOFF');
+  assert.equal(result.handoff.reason, 'UNVERIFIED_LLM_CITATION');
+});
+
+test('melakukan handoff jika ANSWER tidak memiliki faq_id', async () => {
+  const service = createService({
+    matches: [match],
+    llmResponse: JSON.stringify({
+      decision: 'ANSWER',
+      answer: 'Jawaban tanpa sitasi.',
+      faq_ids: [],
+      confidence: 'low'
+    })
+  });
+
+  const result = await service.answer({ message: 'Jadwal kuliah?' });
+
+  assert.equal(result.decision, 'HANDOFF');
+  assert.equal(result.handoff.reason, 'UNVERIFIED_LLM_CITATION');
+});
+
+test('melakukan handoff jika faq_id bukan UUID', async () => {
+  const service = createService({
+    matches: [match],
+    llmResponse: JSON.stringify({
+      decision: 'ANSWER',
+      answer: 'Jawaban dengan format sitasi salah.',
+      faq_ids: ['bukan-uuid'],
+      confidence: 'low'
+    })
+  });
+
+  const result = await service.answer({ message: 'Jadwal kuliah?' });
+
+  assert.equal(result.decision, 'HANDOFF');
+  assert.equal(result.handoff.reason, 'UNVERIFIED_LLM_CITATION');
+});
+
+test('melakukan handoff jika faq_id duplikat', async () => {
+  const service = createService({
+    matches: [match],
+    llmResponse: JSON.stringify({
+      decision: 'ANSWER',
+      answer: 'Jawaban dengan sitasi duplikat.',
+      faq_ids: [match.id, match.id],
+      confidence: 'low'
+    })
+  });
+
+  const result = await service.answer({ message: 'Jadwal kuliah?' });
+
+  assert.equal(result.decision, 'HANDOFF');
   assert.equal(result.handoff.reason, 'UNVERIFIED_LLM_CITATION');
 });
 

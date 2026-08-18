@@ -22,15 +22,33 @@ export function createErrorHandler({ fallbackMessage, logger = console }) {
       cause: error.cause?.message
     });
 
-    if (error instanceof ZodError) {
+    if (error.code === 'CORS_ORIGIN_DENIED') {
+      return response.status(403).json({
+        error: {
+          code: error.code,
+          message: error.message
+        },
+        request_id: requestId
+      });
+    }
+
+    const malformedJson = error instanceof SyntaxError
+      && error.status === 400
+      && error.type === 'entity.parse.failed';
+
+    if (error instanceof ZodError || malformedJson) {
+      const details = error instanceof ZodError
+        ? error.issues.map((issue) => ({
+          field: issue.path.join('.'),
+          message: issue.message
+        }))
+        : undefined;
+
       return response.status(400).json({
         error: {
           code: 'VALIDATION_ERROR',
           message: 'Data permintaan tidak valid.',
-          details: error.issues.map((issue) => ({
-            field: issue.path.join('.'),
-            message: issue.message
-          }))
+          ...(details ? { details } : {})
         },
         request_id: requestId
       });

@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 const historyItemSchema = z.object({
   role: z.enum(['user', 'assistant']),
-  content: z.string().min(1).max(2000)
+  content: z.string().trim().min(1).max(2000)
 });
 
 const chatRequestSchema = z.object({
@@ -22,4 +22,3 @@ export function createChatRouter(chatService) {
 
   return router;
 }
-
