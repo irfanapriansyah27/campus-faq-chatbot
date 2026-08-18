@@ -1,4 +1,4 @@
-import { RepositoryError } from '../utils/errors.js';
+import { AppError, RepositoryError } from '../utils/errors.js';
 
 export class SupabaseFaqRepository {
   constructor(supabase) {
@@ -48,16 +48,25 @@ export class SupabaseFaqRepository {
   async archiveFaq(id) {
     const { data, error } = await this.supabase
       .from('faq_documents')
-      .update({ status: 'archived' })
+      .update({
+        status: 'archived',
+        updated_at: new Date().toISOString()
+      })
       .eq('id', id)
       .select('id, faq_key, status, updated_at')
-      .single();
+      .maybeSingle();
 
     if (error) {
       throw new RepositoryError('Pengarsipan FAQ gagal.', error);
     }
 
+    if (!data) {
+      throw new AppError('FAQ tidak ditemukan.', {
+        status: 404,
+        code: 'FAQ_NOT_FOUND'
+      });
+    }
+
     return data;
   }
 }
-
