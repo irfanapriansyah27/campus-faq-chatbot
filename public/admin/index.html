@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Login Admin | Campus FAQ Chatbot</title>
+  <link rel="stylesheet" href="/admin/admin.css">
+</head>
+<body>
+  <main class="admin-shell">
+    <section class="admin-card" aria-labelledby="admin-title">
+      <p class="eyebrow">Campus FAQ Chatbot</p>
+      <h1 id="admin-title">Login Admin</h1>
+      <p id="status-message" class="status-message" role="status" aria-live="polite">
+        Memeriksa session admin…
+      </p>
+
+      <form id="login-form" class="login-form" hidden>
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="username" maxlength="320" required>
+
+        <label for="password">Kata sandi</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" maxlength="1024" required>
+
+        <button type="submit">Masuk</button>
+      </form>
+
+      <section id="session-panel" hidden>
+        <p>Anda masuk sebagai:</p>
+        <strong id="admin-email"></strong>
+        <p class="role-label">Role: admin</p>
+        <button id="logout-button" class="secondary-button" type="button">Keluar</button>
+      </section>
+    </section>
+  </main>
+
+  <script type="module" src="/admin/admin.js"></script>
+</body>
+</html>

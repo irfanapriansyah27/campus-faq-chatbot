@@ -1,12 +1,27 @@
 import 'dotenv/config';
 import { z } from 'zod';
 
+function isCanonicalOrigin(value) {
+  try {
+    return new URL(value).origin === value;
+  } catch {
+    return false;
+  }
+}
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(3000),
   ALLOWED_ORIGINS: z.string().default('http://localhost:3000'),
   ADMIN_INGEST_KEY: z.string().min(20),
+  ADMIN_APP_ORIGIN: z.string().url().refine(isCanonicalOrigin, {
+    message: 'Harus berupa origin kanonis tanpa path, slash akhir, query, fragment, atau credential.'
+  }).default('http://localhost:3000'),
+  ADMIN_REFRESH_COOKIE_MAX_AGE_SECONDS: z.coerce.number().int().min(3600).max(2_592_000)
+    .default(604800),
+  ADMIN_LOGIN_RATE_LIMIT: z.coerce.number().int().min(1).max(100).default(10),
   SUPABASE_URL: z.string().url(),
+  SUPABASE_PUBLISHABLE_KEY: z.string().min(20),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(20),
   GEMINI_API_KEY: z.string().min(20),
   GEMINI_EMBEDDING_MODEL: z.string().default('gemini-embedding-001'),

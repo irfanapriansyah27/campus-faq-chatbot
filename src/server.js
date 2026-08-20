@@ -1,7 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 import { createApp } from './app.factory.js';
 import { loadConfig } from './config/env.js';
+import { SupabaseAdminRepository } from './repositories/supabase-admin.repository.js';
 import { SupabaseFaqRepository } from './repositories/supabase-faq.repository.js';
+import { AdminAuthService } from './services/admin-auth.service.js';
 import { ChatService } from './services/chat.service.js';
 import { CloudflareLLMService } from './services/cloudflare-llm.service.js';
 import { GeminiEmbeddingService } from './services/gemini-embedding.service.js';
@@ -18,6 +20,17 @@ const supabase = createClient(
     }
   }
 );
+const authClientFactory = () => createClient(
+  config.SUPABASE_URL,
+  config.SUPABASE_PUBLISHABLE_KEY,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false
+    }
+  }
+);
 
 const embeddingService = new GeminiEmbeddingService({
   apiKey: config.GEMINI_API_KEY,
@@ -29,6 +42,11 @@ const llmService = new CloudflareLLMService({
   llmModel: config.CLOUDFLARE_LLM_MODEL
 });
 const faqRepository = new SupabaseFaqRepository(supabase);
+const adminRepository = new SupabaseAdminRepository(supabase);
+const adminAuthService = new AdminAuthService({
+  authClientFactory,
+  adminRepository
+});
 const ingestService = new IngestService({ embeddingService, faqRepository });
 const chatService = new ChatService({
   embeddingService,
@@ -44,7 +62,8 @@ const app = createApp({
   config,
   chatService,
   ingestService,
-  faqRepository
+  faqRepository,
+  adminAuthService
 });
 
 export default app;

@@ -1,5 +1,10 @@
 import crypto from 'node:crypto';
 import { ZodError } from 'zod';
+import { AppError } from '../utils/errors.js';
+
+const LEGACY_CLIENT_ERROR_CODES = new Set([
+  'FAQ_NOT_FOUND'
+]);
 
 export function notFoundHandler(request, response) {
   response.status(404).json({
@@ -12,14 +17,24 @@ export function notFoundHandler(request, response) {
 
 export function createErrorHandler({ fallbackMessage, logger = console }) {
   return function errorHandler(error, request, response, _next) {
-    const requestId = request.get('x-request-id') ?? crypto.randomUUID();
+    const requestId = request.requestId ?? crypto.randomUUID();
+    const malformedJson = error instanceof SyntaxError
+      && error.status === 400
+      && error.type === 'entity.parse.failed';
+    const recognizedLegacyClientError = Number.isInteger(error.status)
+      && error.status >= 400
+      && error.status < 500
+      && LEGACY_CLIENT_ERROR_CODES.has(error.code);
+    const code = error instanceof AppError || recognizedLegacyClientError
+      ? error.code
+      : error instanceof ZodError || malformedJson
+        ? 'VALIDATION_ERROR'
+        : 'INTERNAL_ERROR';
 
     logger.error({
       requestId,
-      path: request.originalUrl,
-      code: error.code,
-      message: error.message,
-      cause: error.cause?.message
+      path: request.path,
+      code
     });
 
     if (error.code === 'CORS_ORIGIN_DENIED') {
@@ -31,10 +46,6 @@ export function createErrorHandler({ fallbackMessage, logger = console }) {
         request_id: requestId
       });
     }
-
-    const malformedJson = error instanceof SyntaxError
-      && error.status === 400
-      && error.type === 'entity.parse.failed';
 
     if (error instanceof ZodError || malformedJson) {
       const details = error instanceof ZodError
@@ -70,8 +81,8 @@ export function createErrorHandler({ fallbackMessage, logger = console }) {
 
     return response.status(error.status ?? 500).json({
       error: {
-        code: error.code ?? 'INTERNAL_ERROR',
-        message: error.status && error.status < 500
+        code,
+        message: error instanceof AppError && error.status < 500
           ? error.message
           : 'Terjadi gangguan pada server.'
       },
