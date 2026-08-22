@@ -140,8 +140,10 @@ Gunakan nilai `ADMIN_INGEST_KEY` yang sama pada backend dan script ingest. Janga
 
 2. Buat dan isi file `.env` berdasarkan daftar konfigurasi di atas.
 
-3. Jalankan migration `supabase/migrations/001_faq_pgvector.sql`, lalu
-   `supabase/migrations/002_admin_auth.sql`, melalui proses migration resmi.
+3. Jalankan migration `supabase/migrations/001_faq_pgvector.sql`,
+   `supabase/migrations/002_admin_auth.sql`, lalu
+   `supabase/migrations/003_faq_documents_service_role_privileges.sql` melalui
+   proses migration resmi.
 
 4. Jalankan server:
 
@@ -328,6 +330,7 @@ URL preview Vercel memiliki origin berbeda dari domain produksi dan akan ditolak
 - Dashboard `/admin` menggunakan Supabase Auth melalui backend-for-frontend. Access token dan refresh token hanya disimpan pada cookie HttpOnly dan tidak dikembalikan melalui JSON.
 - User Supabase Auth harus tercantum sebagai `admin` aktif pada `public.admin_users`; dashboard tidak menyediakan public signup atau manajemen admin.
 - Row Level Security aktif. Hak tabel dan eksekusi RPC untuk `anon` serta `authenticated` dicabut pada migration.
+- Forward migration `003` mereset privilege luas/default pada `public.faq_documents`, lalu memberikan `service_role` hanya `SELECT`, `INSERT`, `UPDATE`, dan `DELETE` yang diperlukan runtime.
 - Endpoint FAQ legacy menggunakan perbandingan constant-time terhadap `ADMIN_INGEST_KEY`.
 - API menggunakan Helmet, allowlist CORS, validasi Zod, batas request JSON 1 MB, dan rate limit pada endpoint chat.
 - Riwayat percakapan tidak disimpan oleh backend; browser hanya mengirim bagian terakhir dari riwayat aktif.
