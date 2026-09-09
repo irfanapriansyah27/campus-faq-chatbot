@@ -1,10 +1,16 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import test from 'node:test';
 import { TextDecoder } from 'node:util';
 
+const execFileAsync = promisify(execFile);
+const repositoryRootUrl = new URL('../', import.meta.url);
 const migrationDirectoryUrl = new URL('../supabase/migrations/', import.meta.url);
+const gitAttributesUrl = new URL('../.gitattributes', import.meta.url);
 const expectedMigrations = [
   {
     name: '001_faq_pgvector.sql',
@@ -17,28 +23,32 @@ const expectedMigrations = [
   {
     name: '003_faq_documents_service_role_privileges.sql',
     sha256: 'a88b288650eb8e55579b8cecb03f0d6d40e8894d34db02dbab477e3ccdd90f4d'
+  },
+  {
+    name: '004_faq_documents_archive_only_privileges.sql',
+    sha256: '91df5159a98b2284f67b28c4095bda104b885b2ea029ca80a6343700a93fc9e4'
+  },
+  {
+    name: '005_faq_documents_version_invariant.sql',
+    sha256: '42a378ef4a77942a3c1b06b2424109631ad003f6c19d7581c085578b7052d02b'
   }
 ];
 
-function canonicalMigrationText(name, bytes) {
+function validateMigrationBytes(name, bytes) {
   if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
     throw new Error(`${name}: UTF-8 BOM is not allowed`);
   }
 
-  let text;
   try {
-    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   } catch {
     throw new Error(`${name}: content is not valid UTF-8`);
   }
-
-  return text.replace(/\r\n?/g, '\n');
 }
 
-function canonicalSha256(name, bytes) {
-  return createHash('sha256')
-    .update(canonicalMigrationText(name, bytes), 'utf8')
-    .digest('hex');
+function rawSha256(name, bytes) {
+  validateMigrationBytes(name, bytes);
+  return createHash('sha256').update(bytes).digest('hex');
 }
 
 function validateMigrationIntegrity(migrations) {
@@ -51,9 +61,9 @@ function validateMigrationIntegrity(migrations) {
   for (const expected of expectedMigrations) {
     const migration = migrations.find(({ name }) => name === expected.name);
     assert.equal(
-      canonicalSha256(migration.name, migration.bytes),
+      rawSha256(migration.name, migration.bytes),
       expected.sha256,
-      `${migration.name}: canonical SHA-256 mismatch`
+      `${migration.name}: raw SHA-256 mismatch`
     );
   }
 }
@@ -70,6 +80,44 @@ async function readCanonicalMigrationSet() {
   })));
 }
 
+test('repository memaksa seluruh migration SQL tetap text dengan LF', async () => {
+  const attributes = await readFile(gitAttributesUrl, 'utf8');
+  assert.equal(attributes, 'supabase/migrations/*.sql text eol=lf\n');
+
+  const paths = expectedMigrations.map(({ name }) => `supabase/migrations/${name}`);
+  const { stdout } = await execFileAsync(
+    'git',
+    ['check-attr', 'text', 'eol', '--', ...paths],
+    { cwd: fileURLToPath(repositoryRootUrl), encoding: 'utf8' }
+  );
+  const attributesByPath = new Map(paths.map((path) => [path, new Map()]));
+
+  for (const line of stdout.trim().split(/\r?\n/)) {
+    const match = line.match(/^(.*): (text|eol): (.*)$/);
+    assert.ok(match, `unexpected git check-attr output: ${line}`);
+    attributesByPath.get(match[1])?.set(match[2], match[3]);
+  }
+
+  for (const path of paths) {
+    assert.deepEqual(
+      Object.fromEntries(attributesByPath.get(path)),
+      { text: 'set', eol: 'lf' },
+      `${path}: LF attributes mismatch`
+    );
+  }
+});
+
+test('migration canonical 001-005 tidak memuat BOM, CRLF, atau lone CR', async () => {
+  for (const migration of await readCanonicalMigrationSet()) {
+    validateMigrationBytes(migration.name, migration.bytes);
+    assert.equal(
+      migration.bytes.includes(0x0d),
+      false,
+      `${migration.name}: carriage return is not allowed`
+    );
+  }
+});
+
 function mutateContent(migrations, name, mutate) {
   return migrations.map((migration) => {
     if (migration.name !== name) {
@@ -83,23 +131,28 @@ function mutateContent(migrations, name, mutate) {
   });
 }
 
-test('canonical migration set 001-003 memiliki exact SHA-256 allowlist', async () => {
+test('migration set 001-005 memiliki exact raw-byte SHA-256 allowlist', async () => {
   validateMigrationIntegrity(await readCanonicalMigrationSet());
 });
 
-test('canonical hash menerima LF, CRLF, dan lone CR sebagai line ending setara', async () => {
+test('raw-byte guard menolak perubahan line ending LF menjadi CRLF atau lone CR', async () => {
   const migrations = await readCanonicalMigrationSet();
 
   for (const migration of migrations) {
-    const normalized = canonicalMigrationText(migration.name, migration.bytes);
-    const lf = Buffer.from(normalized, 'utf8');
-    const crlf = Buffer.from(normalized.replace(/\n/g, '\r\n'), 'utf8');
-    const cr = Buffer.from(normalized.replace(/\n/g, '\r'), 'utf8');
-    const expected = expectedMigrations.find(({ name }) => name === migration.name);
-
-    assert.equal(canonicalSha256(migration.name, lf), expected.sha256);
-    assert.equal(canonicalSha256(migration.name, crlf), expected.sha256);
-    assert.equal(canonicalSha256(migration.name, cr), expected.sha256);
+    const text = migration.bytes.toString('utf8');
+    for (const changedText of [
+      text.replace(/\n/g, '\r\n'),
+      text.replace(/\n/g, '\r')
+    ]) {
+      assert.notEqual(changedText, text, `${migration.name}: fixture harus mengubah line ending`);
+      const mutated = migrations.map((entry) => entry.name === migration.name
+        ? { ...entry, bytes: Buffer.from(changedText, 'utf8') }
+        : entry);
+      assert.throws(
+        () => validateMigrationIntegrity(mutated),
+        new RegExp(`${migration.name.replaceAll('.', '\\.')}: raw SHA-256 mismatch`)
+      );
+    }
   }
 });
 
@@ -154,6 +207,19 @@ test('integrity guard menolak seluruh mutation isi, BOM, set, dan urutan', async
       'trailing newline berubah',
       '003_faq_documents_service_role_privileges.sql',
       (value) => value.endsWith('\n') ? value.slice(0, -1) : `${value}\n`
+    ],
+    [
+      'archive-only privilege berubah',
+      '004_faq_documents_archive_only_privileges.sql',
+      (value) => value.replace(
+        'grant select, insert, update',
+        'grant select, insert, update, delete'
+      )
+    ],
+    [
+      'version invariant berubah',
+      '005_faq_documents_version_invariant.sql',
+      (value) => value.replace('old.version + 1', 'old.version + 2')
     ]
   ];
 
@@ -162,7 +228,7 @@ test('integrity guard menolak seluruh mutation isi, BOM, set, dan urutan', async
       const mutated = mutateContent(migrations, migrationName, mutate);
       assert.throws(
         () => validateMigrationIntegrity(mutated),
-        new RegExp(`${migrationName.replaceAll('.', '\\.')}: canonical SHA-256 mismatch`)
+        new RegExp(`${migrationName.replaceAll('.', '\\.')}: raw SHA-256 mismatch`)
       );
     });
   }
@@ -186,8 +252,8 @@ test('integrity guard menolak seluruh mutation isi, BOM, set, dan urutan', async
   });
 
   await t.test('nama file berubah', () => {
-    const mutated = migrations.map((migration) => migration.name === '003_faq_documents_service_role_privileges.sql'
-      ? { ...migration, name: '004_faq_documents_service_role_privileges.sql' }
+    const mutated = migrations.map((migration) => migration.name === '005_faq_documents_version_invariant.sql'
+      ? { ...migration, name: '006_faq_documents_version_invariant.sql' }
       : migration);
 
     assert.throws(

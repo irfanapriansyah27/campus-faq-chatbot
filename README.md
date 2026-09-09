@@ -15,11 +15,13 @@ Demo produksi: [campus-faq-chatbot-nu.vercel.app](https://campus-faq-chatbot-nu.
 | Verifikasi keluaran LLM | Selesai | Validasi format JSON dan `faq_id` hasil retrieval |
 | Handoff contract | Selesai | Backend mengembalikan `HANDOFF` dengan aksi `OPEN_WIDGET` |
 | Autentikasi dashboard admin | Fase 1 selesai | Supabase Auth BFF, cookie HttpOnly, CSRF, dan role `admin` |
-| Fitur pengelolaan dashboard | Belum dibuat | CRUD, import, retrieval tester, dan statistik berada di fase berikutnya |
+| Core FAQ Management | Fase 2 menunggu delta review | Implementasi dan required fixes masih lokal; migration `004`/`005` belum diterapkan dan fitur belum production-ready |
 | Widget tawk.to | Belum dipasang | Embed code/Property ID akan dipasang oleh tim pengelola website |
 | FAQ resmi kampus | Perlu disiapkan | Data pada `knowledge/faqs.sample.json` hanya untuk demonstrasi |
 
 Project ini tidak menggunakan AI Assist tawk.to. tawk.to ditempatkan sebagai kanal lanjutan untuk percakapan dengan agen manusia setelah backend memutuskan bahwa jawaban otomatis tidak layak diberikan.
+
+Perubahan Fase 2 harus melewati independent delta review, smoke test lokal, dan validasi migration pada PostgreSQL disposable sebelum dipertimbangkan untuk rollout environment.
 
 ## Arsitektur
 
@@ -142,8 +144,11 @@ Gunakan nilai `ADMIN_INGEST_KEY` yang sama pada backend dan script ingest. Janga
 
 3. Jalankan migration `supabase/migrations/001_faq_pgvector.sql`,
    `supabase/migrations/002_admin_auth.sql`, lalu
-   `supabase/migrations/003_faq_documents_service_role_privileges.sql` melalui
-   proses migration resmi.
+   `supabase/migrations/003_faq_documents_service_role_privileges.sql`,
+   `supabase/migrations/004_faq_documents_archive_only_privileges.sql`, lalu
+   `supabase/migrations/005_faq_documents_version_invariant.sql` melalui proses
+   migration resmi. Migration `004` dan `005` masih belum diterapkan pada
+   environment mana pun selama checkpoint lokal Fase 2.
 
 4. Jalankan server:
 
@@ -204,6 +209,11 @@ File `knowledge/faqs.sample.json` saat ini berisi data demonstrasi berstatus `pu
 | `POST` | `/api/admin/auth/refresh` | Merotasi session admin | CSRF + exact origin |
 | `POST` | `/api/admin/auth/logout` | Revoke dan menghapus cookie session | CSRF + exact origin |
 | `GET` | `/api/admin/auth/session` | Memeriksa user dan membership admin | Session admin |
+| `GET` | `/api/admin/faqs` | List, search, filter, sort, pagination, dan total FAQ | Session admin |
+| `POST` | `/api/admin/faqs` | Membuat satu FAQ beserta embedding | Session admin + CSRF + exact origin |
+| `GET` | `/api/admin/faqs/:id` | Mengambil detail FAQ | Session admin |
+| `PUT` | `/api/admin/faqs/:id` | Memperbarui editable fields dengan optimistic concurrency | Session admin + CSRF + exact origin |
+| `PATCH` | `/api/admin/faqs/:id/status` | Mengubah lifecycle FAQ tanpa hard delete | Session admin + CSRF + exact origin |
 
 Endpoint FAQ/ingestion legacy menerima salah satu header berikut:
 
@@ -330,13 +340,14 @@ URL preview Vercel memiliki origin berbeda dari domain produksi dan akan ditolak
 - Dashboard `/admin` menggunakan Supabase Auth melalui backend-for-frontend. Access token dan refresh token hanya disimpan pada cookie HttpOnly dan tidak dikembalikan melalui JSON.
 - User Supabase Auth harus tercantum sebagai `admin` aktif pada `public.admin_users`; dashboard tidak menyediakan public signup atau manajemen admin.
 - Row Level Security aktif. Hak tabel dan eksekusi RPC untuk `anon` serta `authenticated` dicabut pada migration.
-- Forward migration `003` mereset privilege luas/default pada `public.faq_documents`, lalu memberikan `service_role` hanya `SELECT`, `INSERT`, `UPDATE`, dan `DELETE` yang diperlukan runtime.
+- Forward migration `003` mereset privilege luas/default pada `public.faq_documents`; migration `004` kemudian mempersempit runtime `service_role` menjadi hanya `SELECT`, `INSERT`, dan `UPDATE` untuk kontrak archive-only.
+- Forward migration `005` memasang invariant database agar setiap update `public.faq_documents` menaikkan `version` tepat satu dan menggunakan waktu database untuk `updated_at`; migration ini masih menunggu review dan belum diterapkan.
 - Endpoint FAQ legacy menggunakan perbandingan constant-time terhadap `ADMIN_INGEST_KEY`.
 - API menggunakan Helmet, allowlist CORS, validasi Zod, batas request JSON 1 MB, dan rate limit pada endpoint chat.
 - Riwayat percakapan tidak disimpan oleh backend; browser hanya mengirim bagian terakhir dari riwayat aktif.
 - Riwayat dari client tetap diperlakukan sebagai input tidak tepercaya. Validasi role, panjang, dan format tidak membuktikan bahwa isi atau urutan history autentik.
 - Test otomatis tidak mengukur ketersediaan, kuota, latensi, maupun perubahan kebijakan provider eksternal.
-- Dashboard baru menyediakan autentikasi Fase 1. CRUD, audit perubahan FAQ, import, retrieval tester, statistik, MFA, dan sinkronisasi transkrip tawk.to belum tersedia.
+- Dashboard menyediakan autentikasi Fase 1 dan implementasi lokal Core FAQ Management Fase 2 yang masih menunggu delta review. Audit lengkap, import, retrieval tester, statistik, MFA, dan sinkronisasi transkrip tawk.to belum tersedia.
 - Threshold `0.65` telah digunakan pada demonstrasi, tetapi tetap perlu dievaluasi ulang menggunakan variasi pertanyaan dan FAQ resmi kampus.
 
 ## Referensi teknis

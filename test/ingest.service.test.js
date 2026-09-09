@@ -47,12 +47,14 @@ test('ingest membuat embedding lalu menyimpan FAQ yang tervalidasi', async () =>
   const result = await service.ingest([{
     faq_key: 'contoh-faq',
     question: 'Bagaimana cara melihat jadwal?',
-    answer: 'Jadwal dapat dilihat melalui sistem akademik.'
+    answer: 'Jadwal dapat dilihat melalui sistem akademik.',
+    metadata: { tags: ['jadwal', 'akademik'] }
   }]);
 
   assert.match(receivedInputs[0], /Pertanyaan:/);
   assert.deepEqual(receivedRecords[0].embedding, [0.1, 0.2, 0.3]);
   assert.equal(receivedRecords[0].status, 'published');
+  assert.deepEqual(receivedRecords[0].metadata, { tags: ['jadwal', 'akademik'] });
   assert.equal(result.length, 1);
 });
 
@@ -102,6 +104,36 @@ test('ingest melakukan trim pada seluruh field teks FAQ', async () => {
     receivedInputs[0],
     'Pertanyaan: Bagaimana cara melihat jadwal?\nJawaban: Jadwal tersedia di sistem akademik.'
   );
+});
+
+test('ingest menolak metadata non-JSON atau terlalu dalam sebelum provider dan repository', async () => {
+  let embeddingCalls = 0;
+  let repositoryCalls = 0;
+  const service = createService({
+    onEmbedding() {
+      embeddingCalls += 1;
+    },
+    onUpsert() {
+      repositoryCalls += 1;
+    }
+  });
+  const cyclic = {};
+  cyclic.self = cyclic;
+  let tooDeep = true;
+  for (let depth = 0; depth < 10_000; depth += 1) {
+    tooDeep = { nested: tooDeep };
+  }
+
+  for (const metadata of [
+    cyclic,
+    tooDeep,
+    { score: Number.POSITIVE_INFINITY }
+  ]) {
+    await assert.rejects(service.ingest([{ ...validFaq, metadata }]));
+  }
+
+  assert.equal(embeddingCalls, 0);
+  assert.equal(repositoryCalls, 0);
 });
 
 test('ingest menolak duplicate faq_key sebelum memanggil provider atau repository', async () => {

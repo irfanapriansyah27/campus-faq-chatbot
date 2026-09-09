@@ -24,6 +24,21 @@ function createMockClient(calls) {
   };
 }
 
+function createVectorClient(vector) {
+  return {
+    models: {
+      async embedContent(request) {
+        const inputs = Array.isArray(request.contents)
+          ? request.contents
+          : [request.contents];
+        return {
+          embeddings: inputs.map(() => ({ values: vector }))
+        };
+      }
+    }
+  };
+}
+
 test('embedding FAQ menggunakan RETRIEVAL_DOCUMENT dan 1536 dimensi', async () => {
   const calls = [];
   const service = new GeminiEmbeddingService({
@@ -52,3 +67,26 @@ test('embedding pertanyaan menggunakan RETRIEVAL_QUERY', async () => {
   assert.equal(calls[0].config.taskType, 'RETRIEVAL_QUERY');
 });
 
+test('seluruh consumer menolak vector sparse, non-number, NaN, dan infinity', async () => {
+  const sparse = Array(EMBEDDING_DIMENSION);
+  const invalidVectors = [
+    sparse,
+    Object.assign(Array.from({ length: EMBEDDING_DIMENSION }, () => 0.01), { 17: '0.01' }),
+    ...[Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY].map((invalid) => {
+      const vector = Array.from({ length: EMBEDDING_DIMENSION }, () => 0.01);
+      vector[17] = invalid;
+      return vector;
+    })
+  ];
+
+  for (const vector of invalidVectors) {
+    const service = new GeminiEmbeddingService({
+      apiKey: 'unused-test-key',
+      client: createVectorClient(vector)
+    });
+    const isProviderError = (error) => error.status === 503 && error.code === 'AI_PROVIDER_ERROR';
+
+    await assert.rejects(service.createDocumentEmbeddings(['FAQ']), isProviderError);
+    await assert.rejects(service.createQueryEmbedding('Pertanyaan?'), isProviderError);
+  }
+});

@@ -9,6 +9,7 @@ import { createAdminAuth } from './middleware/admin-auth.js';
 import { createErrorHandler, notFoundHandler } from './middleware/error-handler.js';
 import { createChatRouter } from './routes/chat.routes.js';
 import { createAdminAuthRouter } from './routes/admin-auth.routes.js';
+import { createAdminFaqRouter } from './routes/admin-faq.routes.js';
 import { createFaqRouter } from './routes/faq.routes.js';
 import { AppError } from './utils/errors.js';
 
@@ -21,6 +22,7 @@ export function createApp({
   ingestService,
   faqRepository,
   adminAuthService,
+  adminFaqService,
   logger = console
 }) {
   const app = express();
@@ -30,6 +32,10 @@ export function createApp({
   app.use((request, response, next) => {
     request.requestId = crypto.randomUUID();
     response.set('x-request-id', request.requestId);
+    next();
+  });
+  app.use('/api/admin', (_request, response, next) => {
+    response.set('Cache-Control', 'no-store');
     next();
   });
   app.use(helmet({ contentSecurityPolicy: false }));
@@ -69,6 +75,14 @@ export function createApp({
 
   if (adminAuthService) {
     app.use('/api/admin/auth', createAdminAuthRouter({
+      adminAuthService,
+      config
+    }));
+  }
+
+  if (adminAuthService && adminFaqService) {
+    app.use('/api/admin/faqs', createAdminFaqRouter({
+      adminFaqService,
       adminAuthService,
       config
     }));

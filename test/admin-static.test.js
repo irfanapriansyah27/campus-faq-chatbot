@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const repositoryRoot = new URL('../', import.meta.url);
@@ -54,21 +54,28 @@ test('asset admin tersedia sebagai file statis dan tidak bergantung pada rewrite
     readFile(new URL('public/admin/index.html', repositoryRoot), 'utf8'),
     readFile(new URL('public/admin/admin.css', repositoryRoot), 'utf8'),
     readFile(new URL('public/admin/admin.js', repositoryRoot), 'utf8'),
+    readFile(new URL('public/admin/faq-metadata.js', repositoryRoot), 'utf8'),
+    readFile(new URL('public/admin/faq-ui.js', repositoryRoot), 'utf8'),
     readFile(new URL('public/admin/security-cookie.js', repositoryRoot), 'utf8')
   ]);
 });
 
-test('frontend admin tidak memuat fitur di luar Fase 1 atau nama secret backend', async () => {
+test('frontend admin tidak memuat fitur di luar Core FAQ Management atau nama secret backend', async () => {
   const html = await readFile(new URL('public/admin/index.html', repositoryRoot), 'utf8');
-  const script = await readFile(new URL('public/admin/admin.js', repositoryRoot), 'utf8');
-  const cookieScript = await readFile(
-    new URL('public/admin/security-cookie.js', repositoryRoot),
-    'utf8'
-  );
-  const combined = `${html}\n${script}\n${cookieScript}`;
+  const adminDirectory = new URL('public/admin/', repositoryRoot);
+  const scriptNames = (await readdir(adminDirectory))
+    .filter((name) => name.endsWith('.js'))
+    .sort();
+  const scripts = await Promise.all(scriptNames.map(
+    (name) => readFile(new URL(name, adminDirectory), 'utf8')
+  ));
+  const combined = `${html}\n${scripts.join('\n')}`;
 
   assert.doesNotMatch(combined, /SUPABASE_SERVICE_ROLE_KEY|ADMIN_INGEST_KEY|GEMINI_API_KEY|CLOUDFLARE_API_TOKEN/);
   assert.doesNotMatch(combined, /retrieval tester|import FAQ|statistik/i);
   assert.doesNotMatch(combined, /access_token|refresh_token/);
-  assert.doesNotMatch(combined, /\.innerHTML\b/);
+  assert.doesNotMatch(
+    combined,
+    /\.innerHTML\b|\.outerHTML\b|insertAdjacentHTML|\beval\s*\(/i
+  );
 });

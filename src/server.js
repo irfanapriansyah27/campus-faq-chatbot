@@ -4,6 +4,7 @@ import { loadConfig } from './config/env.js';
 import { SupabaseAdminRepository } from './repositories/supabase-admin.repository.js';
 import { SupabaseFaqRepository } from './repositories/supabase-faq.repository.js';
 import { AdminAuthService } from './services/admin-auth.service.js';
+import { AdminFaqService } from './services/admin-faq.service.js';
 import { ChatService } from './services/chat.service.js';
 import { CloudflareLLMService } from './services/cloudflare-llm.service.js';
 import { GeminiEmbeddingService } from './services/gemini-embedding.service.js';
@@ -48,6 +49,7 @@ const adminAuthService = new AdminAuthService({
   adminRepository
 });
 const ingestService = new IngestService({ embeddingService, faqRepository });
+const adminFaqService = new AdminFaqService({ embeddingService, faqRepository });
 const chatService = new ChatService({
   embeddingService,
   llmService,
@@ -63,7 +65,8 @@ const app = createApp({
   chatService,
   ingestService,
   faqRepository,
-  adminAuthService
+  adminAuthService,
+  adminFaqService
 });
 
 export default app;

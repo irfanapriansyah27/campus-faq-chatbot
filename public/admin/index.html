@@ -4,36 +4,221 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
-  <title>Login Admin | Campus FAQ Chatbot</title>
+  <title>Admin Console | Campus FAQ</title>
   <link rel="stylesheet" href="/admin/admin.css">
 </head>
 <body>
-  <main class="admin-shell">
-    <section class="admin-card" aria-labelledby="admin-title">
-      <p class="eyebrow">Campus FAQ Chatbot</p>
+  <main id="auth-view" class="auth-shell">
+    <section class="auth-card" aria-labelledby="admin-title">
+      <p class="eyebrow">Campus FAQ</p>
       <h1 id="admin-title">Login Admin</h1>
       <p id="status-message" class="status-message" role="status" aria-live="polite">
         Memeriksa session admin…
       </p>
-
       <form id="login-form" class="login-form" hidden>
-        <label for="email">Email</label>
-        <input id="email" name="email" type="email" autocomplete="username" maxlength="320" required>
-
-        <label for="password">Kata sandi</label>
-        <input id="password" name="password" type="password" autocomplete="current-password" maxlength="1024" required>
-
-        <button type="submit">Masuk</button>
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" autocomplete="username" maxlength="320" required>
+        </div>
+        <div class="field">
+          <label for="password">Kata sandi</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" maxlength="1024" required>
+        </div>
+        <button type="submit" class="button primary-button">Masuk</button>
       </form>
-
-      <section id="session-panel" hidden>
-        <p>Anda masuk sebagai:</p>
-        <strong id="admin-email"></strong>
-        <p class="role-label">Role: admin</p>
-        <button id="logout-button" class="secondary-button" type="button">Keluar</button>
-      </section>
     </section>
   </main>
+
+  <div id="console-view" class="console" hidden>
+    <header class="console-header">
+      <div class="header-content">
+        <div class="brand-block">
+          <span class="brand-name">Campus FAQ</span>
+          <span class="console-label">Admin Console</span>
+        </div>
+        <div class="admin-identity">
+          <span id="admin-email" class="admin-email"></span>
+          <span class="role-badge">Admin</span>
+          <button id="logout-button" class="button quiet-button" type="button">Keluar</button>
+        </div>
+      </div>
+      <nav class="module-nav" aria-label="Modul admin">
+        <a href="#faq" aria-current="page">FAQ</a>
+      </nav>
+    </header>
+
+    <main class="workspace">
+      <div id="global-notice" class="notice" role="status" aria-live="polite" hidden></div>
+
+      <section id="list-view" aria-labelledby="list-title">
+        <div class="page-heading">
+          <div>
+            <p class="section-label">FAQ</p>
+            <h1 id="list-title">Kelola FAQ</h1>
+            <p class="page-description">Kelola jawaban yang dapat digunakan chatbot kampus.</p>
+          </div>
+          <button id="add-faq-button" class="button primary-button" type="button">Tambah FAQ</button>
+        </div>
+
+        <form id="list-controls" class="list-controls" role="search">
+          <div class="field search-field">
+            <label for="faq-search">Cari pertanyaan atau jawaban</label>
+            <div class="inline-control">
+              <input id="faq-search" name="q" type="search" maxlength="200" placeholder="Contoh: jadwal kuliah">
+              <button class="button secondary-button" type="submit">Cari</button>
+            </div>
+          </div>
+          <div class="field compact-field">
+            <label for="status-filter">Status</label>
+            <select id="status-filter" name="status">
+              <option value="all">Semua status</option>
+              <option value="draft">Draf</option>
+              <option value="published">Terbit</option>
+              <option value="archived">Diarsipkan</option>
+            </select>
+          </div>
+          <div class="field compact-field">
+            <label for="sort-control">Urutkan</label>
+            <select id="sort-control" name="sort">
+              <option value="updated_at:desc">Terakhir diperbarui</option>
+              <option value="updated_at:asc">Pembaruan terlama</option>
+              <option value="question:asc">Pertanyaan A–Z</option>
+              <option value="question:desc">Pertanyaan Z–A</option>
+              <option value="category:asc">Kategori A–Z</option>
+              <option value="status:asc">Status</option>
+            </select>
+          </div>
+        </form>
+
+        <div class="list-summary"><p id="result-count">Memuat FAQ…</p></div>
+        <div id="list-loading" class="state-panel" role="status">Memuat daftar FAQ…</div>
+        <div id="list-empty" class="state-panel" hidden>
+          <h2 id="empty-title">Belum ada FAQ</h2>
+          <p id="empty-description">Tambahkan FAQ pertama untuk memulai.</p>
+        </div>
+        <div id="list-error" class="state-panel error-panel" hidden>
+          <h2>Daftar FAQ tidak dapat dimuat</h2>
+          <p id="list-error-message">Silakan coba kembali.</p>
+          <button id="retry-list-button" class="button secondary-button" type="button">Coba lagi</button>
+        </div>
+
+        <div id="faq-table-region" class="table-region" hidden>
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Pertanyaan</th>
+                <th scope="col">Kategori</th>
+                <th scope="col">Status</th>
+                <th scope="col">Terakhir diperbarui</th>
+                <th scope="col"><span class="visually-hidden">Aksi</span></th>
+              </tr>
+            </thead>
+            <tbody id="faq-table-body"></tbody>
+          </table>
+        </div>
+
+        <nav id="pagination" class="pagination" aria-label="Halaman FAQ" hidden>
+          <button id="previous-page" class="button secondary-button" type="button">Sebelumnya</button>
+          <span id="page-indicator">Halaman 1</span>
+          <button id="next-page" class="button secondary-button" type="button">Berikutnya</button>
+        </nav>
+      </section>
+
+      <section id="editor-view" aria-labelledby="editor-title" hidden>
+        <button id="back-to-list" class="back-button" type="button">← Kembali ke daftar</button>
+        <div class="editor-heading">
+          <div>
+            <p class="section-label">FAQ</p>
+            <h1 id="editor-title">Tambah FAQ</h1>
+            <p id="editor-description" class="page-description">Simpan informasi kampus sebagai draf atau terbitkan secara eksplisit.</p>
+          </div>
+          <span id="editor-status-badge" class="status-badge" hidden></span>
+        </div>
+
+        <div id="editor-loading" class="state-panel" hidden>Memuat detail FAQ…</div>
+        <div id="editor-not-found" class="state-panel error-panel" hidden>
+          <h2>FAQ tidak ditemukan</h2>
+          <p>Data mungkin telah berubah. Kembali ke daftar untuk memuat kondisi terbaru.</p>
+        </div>
+
+        <form id="faq-form" class="editor-form" novalidate>
+          <div id="form-error-summary" class="form-error-summary" role="alert" hidden></div>
+          <div id="version-conflict" class="conflict-panel" role="alert" hidden>
+            <p>Data FAQ telah berubah sejak Anda membukanya.</p>
+            <button id="reload-conflict-button" class="button secondary-button" type="button">Muat ulang</button>
+          </div>
+
+          <div class="form-grid">
+            <div class="field full-field">
+              <label for="faq-key">FAQ key</label>
+              <input id="faq-key" name="faq_key" type="text" minlength="2" maxlength="100" pattern="[a-z0-9][a-z0-9_-]*" required aria-describedby="faq-key-help faq-key-error">
+              <small id="faq-key-help">Gunakan huruf kecil, angka, tanda hubung, atau underscore. Key tidak dapat diubah setelah dibuat.</small>
+              <span id="faq-key-error" class="field-error"></span>
+            </div>
+            <div class="field full-field">
+              <label for="faq-question">Pertanyaan</label>
+              <textarea id="faq-question" name="question" rows="3" minlength="5" maxlength="1000" required aria-describedby="question-error"></textarea>
+              <span id="question-error" class="field-error"></span>
+            </div>
+            <div class="field full-field">
+              <label for="faq-answer">Jawaban</label>
+              <textarea id="faq-answer" name="answer" rows="8" minlength="5" maxlength="5000" required aria-describedby="answer-error"></textarea>
+              <span id="answer-error" class="field-error"></span>
+            </div>
+            <div class="field">
+              <label for="faq-category">Kategori</label>
+              <input id="faq-category" name="category" type="text" minlength="2" maxlength="100" required aria-describedby="category-error">
+              <span id="category-error" class="field-error"></span>
+            </div>
+            <div class="field">
+              <label for="faq-source">Sumber</label>
+              <input id="faq-source" name="source" type="text" minlength="1" maxlength="500" required aria-describedby="source-error">
+              <span id="source-error" class="field-error"></span>
+            </div>
+            <div id="create-status-field" class="field full-field">
+              <label for="create-status">Status awal</label>
+              <select id="create-status" name="status">
+                <option value="draft" selected>Simpan sebagai Draf</option>
+                <option value="published">Terbitkan sekarang</option>
+              </select>
+            </div>
+          </div>
+
+          <details class="advanced-settings">
+            <summary>Pengaturan lanjutan</summary>
+            <div class="field">
+              <label for="faq-metadata">Metadata JSON <span class="optional-label">Opsional</span></label>
+              <textarea id="faq-metadata" name="metadata" rows="5" spellcheck="false" aria-describedby="metadata-help metadata-error">{}</textarea>
+              <small id="metadata-help">Gunakan object JSON, misalnya {"audience":"mahasiswa"}.</small>
+              <span id="metadata-error" class="field-error"></span>
+            </div>
+          </details>
+
+          <div id="edit-status-section" class="status-actions-section" hidden>
+            <h2>Lifecycle FAQ</h2>
+            <p id="status-guidance">Ubah ketersediaan FAQ untuk chatbot.</p>
+            <div id="status-actions" class="status-actions"></div>
+          </div>
+
+          <div class="form-actions">
+            <button id="cancel-edit-button" class="button secondary-button" type="button">Batal</button>
+            <button id="save-faq-button" class="button primary-button" type="submit">Simpan draf</button>
+          </div>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="archive-dialog" aria-labelledby="archive-title">
+    <form method="dialog" class="dialog-content">
+      <h2 id="archive-title">Arsipkan FAQ?</h2>
+      <p>FAQ yang diarsipkan tidak akan digunakan oleh chatbot. Data tetap tersimpan dan dapat dipulihkan ke draf.</p>
+      <div class="dialog-actions">
+        <button class="button secondary-button" value="cancel">Batal</button>
+        <button id="confirm-archive-button" class="button danger-button" value="confirm">Arsipkan FAQ</button>
+      </div>
+    </form>
+  </dialog>
 
   <script type="module" src="/admin/admin.js"></script>
 </body>
