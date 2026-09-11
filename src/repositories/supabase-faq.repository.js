@@ -96,7 +96,7 @@ export class SupabaseFaqRepository {
     return data ?? [];
   }
 
-  async listAdminFaqs({ q, status, page, page_size, sort_by, sort_order }) {
+  async listAdminFaqs({ q, status, category, page, page_size, sort_by, sort_order }) {
     if (!ADMIN_SORT_COLUMNS.has(sort_by) || !['asc', 'desc'].includes(sort_order)) {
       throw invalidListQuery('Parameter pengurutan FAQ tidak valid.');
     }
@@ -125,6 +125,9 @@ export class SupabaseFaqRepository {
     }
     if (status !== 'all') {
       query = query.eq('status', status);
+    }
+    if (category) {
+      query = query.eq('category', category);
     }
 
     const { data, error, count } = await query

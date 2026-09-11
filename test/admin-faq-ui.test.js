@@ -20,11 +20,12 @@ test('helper list membangun query deterministik dan encode input', () => {
   assert.equal(buildFaqListQuery({
     q: 'jadwal & ujian',
     status: 'published',
+    category: 'layanan akademik',
     page: 2,
     pageSize: 20,
     sortBy: 'question',
     sortOrder: 'asc'
-  }), 'q=jadwal+%26+ujian&status=published&page=2&page_size=20&sort_by=question&sort_order=asc');
+  }), 'q=jadwal+%26+ujian&status=published&category=layanan+akademik&page=2&page_size=20&sort_by=question&sort_order=asc');
 });
 
 test('helper status, date, dan preview menghasilkan teks aman', () => {
@@ -101,6 +102,7 @@ test('admin UI memakai semantic controls tanpa hard delete atau future placehold
 
   assert.match(html, /<table/);
   assert.match(html, /id="faq-form"/);
+  assert.match(html, /id="category-filter"/);
   assert.match(html, /id="archive-dialog"/);
   assert.match(html, /aria-live="polite"/);
   assert.doesNotMatch(combined, /method:\s*['"]DELETE['"]|hard delete|Usage & Health|Coming soon/i);

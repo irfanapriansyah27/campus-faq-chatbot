@@ -30,6 +30,7 @@ const listView = document.querySelector('#list-view');
 const listControls = document.querySelector('#list-controls');
 const searchInput = document.querySelector('#faq-search');
 const statusFilter = document.querySelector('#status-filter');
+const categoryFilter = document.querySelector('#category-filter');
 const sortControl = document.querySelector('#sort-control');
 const resultCount = document.querySelector('#result-count');
 const listLoading = document.querySelector('#list-loading');
@@ -268,7 +269,7 @@ function renderListState() {
   if (phase === 'zero-results') {
     resultCount.textContent = '0 hasil';
     emptyTitle.textContent = 'Tidak ada FAQ yang sesuai';
-    emptyDescription.textContent = 'Ubah kata pencarian atau filter status.';
+    emptyDescription.textContent = 'Ubah kata pencarian, filter status, atau kategori.';
     return;
   }
   if (phase !== 'ready') return;
@@ -310,7 +311,9 @@ async function loadFaqs() {
     }
 
     state.pageMeta = payload.meta;
-    const filtered = Boolean(state.query.q) || state.query.status !== 'all';
+    const filtered = Boolean(state.query.q)
+      || state.query.status !== 'all'
+      || Boolean(state.query.category);
     state.list = reduceFaqListState(state.list, {
       type: 'SUCCESS',
       data: payload.data,
@@ -704,6 +707,7 @@ logoutButton.addEventListener('click', async () => {
 listControls.addEventListener('submit', (event) => {
   event.preventDefault();
   state.query.q = searchInput.value.trim();
+  state.query.category = categoryFilter.value.trim();
   state.query.page = 1;
   loadFaqs();
 });

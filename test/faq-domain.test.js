@@ -118,12 +118,17 @@ test('list query menerapkan default, trim, dan allowlist', () => {
   assert.deepEqual(adminFaqListQuerySchema.parse({}), {
     q: '',
     status: 'all',
+    category: '',
     page: 1,
     page_size: 20,
     sort_by: 'updated_at',
     sort_order: 'desc'
   });
   assert.equal(adminFaqListQuerySchema.parse({ q: '  jadwal  ' }).q, 'jadwal');
+  assert.equal(
+    adminFaqListQuerySchema.parse({ category: '  akademik  ' }).category,
+    'akademik'
+  );
 
   for (const query of [
     { page: '0' },
@@ -131,6 +136,7 @@ test('list query menerapkan default, trim, dan allowlist', () => {
     { page_size: '9' },
     { page_size: '101' },
     { status: 'deleted' },
+    { category: 'x' },
     { sort_by: 'embedding' },
     { sort_order: 'sideways' },
     { q: 'x'.repeat(201) },

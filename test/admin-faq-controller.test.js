@@ -308,7 +308,8 @@ test('logout/auth loss menginvalidasi request dan mereset seluruh state sensitif
   assert.equal(state.editing, null);
   assert.equal(state.formBusy, false);
   assert.deepEqual(state.query, {
-    q: '', status: 'all', page: 1, pageSize: 20, sortBy: 'updated_at', sortOrder: 'desc'
+    q: '', status: 'all', category: '', page: 1, pageSize: 20,
+    sortBy: 'updated_at', sortOrder: 'desc'
   });
   assert.deepEqual(viewMessages, ['Session berakhir.']);
 });

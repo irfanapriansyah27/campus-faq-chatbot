@@ -12,6 +12,7 @@ export function createFaqQueryState() {
   return {
     q: '',
     status: 'all',
+    category: '',
     page: 1,
     pageSize: 20,
     sortBy: 'updated_at',
@@ -250,6 +251,7 @@ export function truncateText(value, maxLength = 120) {
 export function buildFaqListQuery({
   q,
   status,
+  category,
   page,
   pageSize,
   sortBy,
@@ -258,6 +260,7 @@ export function buildFaqListQuery({
   return new URLSearchParams({
     q,
     status,
+    category,
     page: String(page),
     page_size: String(pageSize),
     sort_by: sortBy,

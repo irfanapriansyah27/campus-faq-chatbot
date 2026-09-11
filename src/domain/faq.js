@@ -70,6 +70,13 @@ export const adminFaqListQuerySchema = z.object({
     })
     .default(''),
   status: z.enum(['all', 'draft', 'published', 'archived']).default('all'),
+  category: z.string()
+    .trim()
+    .max(100)
+    .refine((value) => value.length === 0 || value.length >= 2, {
+      message: 'Kategori harus kosong atau memuat minimal 2 karakter.'
+    })
+    .default(''),
   page: z.coerce.number().int().min(1).default(1),
   page_size: z.coerce.number().int().min(10).max(100).default(20),
   sort_by: z.enum([

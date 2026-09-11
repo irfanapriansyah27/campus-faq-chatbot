@@ -98,6 +98,7 @@ function createRealSupabaseHarness() {
 const listQuery = Object.freeze({
   q: '',
   status: 'all',
+  category: '',
   page: 1,
   page_size: 20,
   sort_by: 'updated_at',
@@ -120,6 +121,7 @@ test('list admin memakai exact count, pagination, filter, escaped search, dan de
   const result = await repository.listAdminFaqs({
     q: '50%_\\faq',
     status: 'published',
+    category: 'akademik',
     page: 2,
     page_size: 20,
     sort_by: 'question',
@@ -133,7 +135,10 @@ test('list admin memakai exact count, pagination, filter, escaped search, dan de
     column: 'content',
     pattern: '%50\\%\\_\\\\faq%'
   });
-  assert.deepEqual(calls[0].equals, [{ column: 'status', value: 'published' }]);
+  assert.deepEqual(calls[0].equals, [
+    { column: 'status', value: 'published' },
+    { column: 'category', value: 'akademik' }
+  ]);
   assert.deepEqual(calls[0].orders, [
     { column: 'question', options: { ascending: true } },
     { column: 'id', options: { ascending: true } }
@@ -200,6 +205,7 @@ test('list admin menolak sort column di luar allowlist sebelum query', async () 
   await assert.rejects(
     repository.listAdminFaqs({
       q: '', status: 'all', page: 1, page_size: 20,
+      category: '',
       sort_by: 'embedding', sort_order: 'desc'
     }),
     (error) => error.status === 400 && error.code === 'VALIDATION_ERROR'
