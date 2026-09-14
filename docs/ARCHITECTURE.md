@@ -1,79 +1,79 @@
 # Arsitektur Campus FAQ Chatbot
 
-## Aliran utama
+## Batas sistem
 
 ```mermaid
 flowchart TD
-    A["Visitor"] --> B["POST /api/chat"]
-    B --> C["Gemini embedding 1536"]
-    C --> D["Supabase match_faq"]
-    D --> E{"Ada konteks?"}
-    E -- Ya --> F["Qwen3 grounded answer"]
-    F --> G["Validasi JSON dan faq_id"]
-    G --> H["Jawaban visitor"]
-    E -- Tidak --> I["HANDOFF ke tawk.to"]
+    B["Browser"] -->|"POST /api/chat"| N["Node.js / Express"]
+    N -->|"RETRIEVAL_QUERY"| G["Gemini Embedding 1536"]
+    N -->|"match_faq"| S["Supabase PostgreSQL + pgvector"]
+    S --> N
+    N -->|"Konteks FAQ"| C["Cloudflare Workers AI"]
+    C --> N
+    N -->|"ANSWER atau HANDOFF"| B
+    A["Admin Console"] -->|"BFF cookies + CSRF"| N
+    N -->|"Supabase Auth"| AU["Supabase Auth"]
+    N -->|"admin_users / faq_documents"| S
 ```
 
-## Batas komponen
-
-| Komponen | Tanggung jawab | Tidak boleh dilakukan |
+| Komponen | Tanggung jawab | Batas keamanan |
 |---|---|---|
-| Browser/widget | Mengirim pertanyaan dan menampilkan jawaban | Menyimpan API key |
-| Node.js API | Validasi, control flow, retrieval, prompt, dan handoff | Menjawab dari pengetahuan yang tidak terverifikasi |
-| Gemini API | Membuat embedding FAQ/query 1536 dimensi | Membuat jawaban untuk visitor |
-| Cloudflare Workers AI | Menjalankan LLM generatif open-weight | Mengakses Supabase secara langsung |
-| Supabase | Menyimpan FAQ/vector dan menghitung similarity | Memanggil LLM |
-| tawk.to | Percakapan lanjutan dengan CS manusia | Menjadi provider AI |
+| Browser | Menampilkan chat/Admin Console | Tidak menerima provider key atau token Auth melalui JSON |
+| Express | Validasi, orkestrasi, auth BFF, retrieval, dan handoff | Semua secret tetap server-side |
+| Gemini | Embedding dokumen dan query 1536 dimensi | Tidak membuat jawaban visitor |
+| Supabase | Auth, FAQ/vector, similarity, allowlist admin | RLS aktif; akses runtime dibatasi ACL |
+| Cloudflare Workers AI | Generasi jawaban dari konteks | Tidak mengakses database langsung |
+| tawk.to | Kanal agen manusia setelah handoff | Snippet/properti belum menjadi bagian repository |
 
-## Verifikasi dua langkah
+## Pipeline grounded answer
 
-1. `match_faq` hanya mengembalikan FAQ `published` yang mencapai threshold.
-2. LLM generatif wajib mengembalikan `faq_ids` yang termasuk dalam hasil retrieval. ID yang tidak dikenal menyebabkan backend mengembalikan `HANDOFF` dengan alasan `UNVERIFIED_LLM_CITATION`.
+1. Request divalidasi: pesan 2–2000 karakter dan maksimal 12 item history.
+2. Gemini membuat embedding query dengan task type `RETRIEVAL_QUERY`.
+3. RPC `match_faq` hanya mengembalikan FAQ `published` yang melewati threshold.
+4. Tanpa hasil retrieval, backend segera mengembalikan `HANDOFF` dan tidak
+   memanggil LLM.
+5. Cloudflare LLM menerima konteks hasil retrieval dan wajib menghasilkan satu
+   object JSON sesuai kontrak.
+6. Backend memastikan setiap `faq_id` unik dan terdapat dalam hasil retrieval.
+   JSON invalid, konteks tidak cukup, atau citation asing menghasilkan `HANDOFF`.
 
-Gemini menggunakan `RETRIEVAL_DOCUMENT` saat ingestion dan `RETRIEVAL_QUERY` saat pertanyaan visitor diproses. Seluruh FAQ harus dibuat dengan model dan dimensi yang sama.
+Embedding FAQ dibuat dengan task type `RETRIEVAL_DOCUMENT`. Model dan dimensi
+harus sama dengan embedding query.
 
-Jika tidak ada konteks, backend tidak memanggil model generatif. Hal ini mengurangi penggunaan kuota dan mencegah jawaban di luar knowledge base.
+## Data dan lifecycle FAQ
 
-## Keputusan integrasi tawk.to
+`public.faq_documents` menyimpan konten, metadata, status, version, timestamp,
+dan `vector(1536)`. Hanya `published` ikut retrieval. Admin dapat memindahkan:
 
-Public webhook tawk.to menyediakan event chat start, chat end, transcript, dan ticket. Tidak ada event publik untuk setiap pesan beserta API terdokumentasi untuk memasukkan balasan bot eksternal ke percakapan native secara real time. Oleh sebab itu:
-
-- chatbot AI menggunakan widget aplikasi;
-- keputusan `HANDOFF` menampilkan tombol CS;
-- tombol menjalankan `Tawk_API.maximize()` ketika snippet tawk.to kampus tersedia pada halaman;
-- percakapan selanjutnya berlangsung di widget tawk.to bersama agen manusia.
-
-## Kontrak respons chat
-
-Jawaban FAQ:
-
-```json
-{
-  "decision": "ANSWER",
-  "answer": "Jawaban yang telah diverifikasi.",
-  "confidence": "high",
-  "sources": [
-    {
-      "faq_id": "uuid",
-      "question": "Pertanyaan FAQ",
-      "similarity": 0.82
-    }
-  ],
-  "mode": "GROUNDED_LLM"
-}
+```text
+draft <-> published
+  |          |
+  +------> archived ----> draft
 ```
 
-Handoff:
+Tidak ada transisi langsung `archived → published`; FAQ dipulihkan ke `draft`
+agar dapat ditinjau. Update menggunakan optimistic concurrency dan trigger
+database menaikkan version serta `updated_at`.
 
-```json
-{
-  "decision": "HANDOFF",
-  "answer": "Informasi belum tersedia.",
-  "sources": [],
-  "handoff": {
-    "provider": "tawk.to",
-    "action": "OPEN_WIDGET",
-    "reason": "NO_RELEVANT_FAQ"
-  }
-}
-```
+Runtime `service_role` hanya mendapat `SELECT`, `INSERT`, dan `UPDATE` pada
+`faq_documents`. Archive menggunakan update status. Hard delete bukan kemampuan
+aplikasi dan hanya boleh dilakukan sebagai pemeliharaan database khusus.
+
+## Autentikasi Admin Console
+
+Browser mengirim email/password ke BFF dengan exact origin dan token CSRF.
+Supabase Auth memverifikasi credential. Backend kemudian mencari UUID user pada
+`public.admin_users` dan hanya menerima `role=admin` yang aktif. Access/refresh
+token disimpan dalam cookie HttpOnly, `Secure` di Production, `SameSite=Strict`,
+dan tidak dikembalikan dalam response JSON.
+
+`anon` dan `authenticated` tidak mendapat akses tabel admin atau FAQ. Client
+service-role backend hanya dapat membaca allowlist. Rincian ada di
+[ADMIN_AUTH.md](ADMIN_AUTH.md).
+
+## Deployment
+
+Entry point Vercel adalah `index.js`; `src/server.js` hanya memanggil `listen`
+ketika `VERCEL` tidak ada. Branch `main` adalah sumber deployment Production.
+Environment Vercel memisahkan Production dan Preview, sedangkan project Supabase
+Production dan staging adalah project berbeda.
