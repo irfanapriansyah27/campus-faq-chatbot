@@ -1,360 +1,133 @@
 # Campus FAQ Chatbot
 
-Campus FAQ Chatbot adalah layanan informasi kampus berbasis FAQ yang menggabungkan pencarian semantik, jawaban berbasis konteks, dan mekanisme pengalihan ke customer service. Backend hanya mengizinkan model generatif menjawab menggunakan FAQ yang ditemukan di knowledge base; pertanyaan tanpa konteks memadai dikembalikan sebagai keputusan `HANDOFF`.
+Campus FAQ Chatbot menyediakan jawaban kampus berbasis FAQ yang terverifikasi dan
+mengalihkan pertanyaan ke layanan manusia ketika konteks tidak cukup. Aplikasi
+Production tersedia di [campus-faq-chatbot-nu.vercel.app](https://campus-faq-chatbot-nu.vercel.app).
 
-Demo produksi: [campus-faq-chatbot-nu.vercel.app](https://campus-faq-chatbot-nu.vercel.app)
+## Fitur
 
-## Status implementasi
+- pencarian semantik FAQ `published` menggunakan Gemini Embedding dan pgvector;
+- jawaban grounded melalui Cloudflare Workers AI dengan validasi JSON dan sumber;
+- fallback `HANDOFF` saat retrieval atau hasil model tidak dapat diverifikasi;
+- Admin Console di `/admin` dengan Supabase Auth, cookie HttpOnly, CSRF, dan
+  allowlist `public.admin_users`;
+- pengelolaan FAQ dengan pencarian, filter, pagination, optimistic concurrency,
+  dan lifecycle `draft`, `published`, serta `archived`;
+- archive/soft-delete sebagai satu-satunya alur penghapusan aplikasi.
 
-| Komponen | Status | Keterangan |
-|---|---|---|
-| API Node.js/Express | Selesai | Berjalan lokal dan sebagai Vercel Function |
-| Knowledge base Supabase | Selesai | PostgreSQL, pgvector, HNSW, dan RPC `match_faq` |
-| Embedding FAQ dan query | Selesai | Gemini `gemini-embedding-001`, 1536 dimensi |
-| Jawaban berbasis konteks | Selesai | Qwen3 melalui Cloudflare Workers AI |
-| Verifikasi keluaran LLM | Selesai | Validasi format JSON dan `faq_id` hasil retrieval |
-| Handoff contract | Selesai | Backend mengembalikan `HANDOFF` dengan aksi `OPEN_WIDGET` |
-| Autentikasi dashboard admin | Fase 1 selesai | Supabase Auth BFF, cookie HttpOnly, CSRF, dan role `admin` |
-| Core FAQ Management | Fase 2 menunggu delta review | Implementasi dan required fixes masih lokal; migration `004`/`005` belum diterapkan dan fitur belum production-ready |
-| Widget tawk.to | Belum dipasang | Embed code/Property ID akan dipasang oleh tim pengelola website |
-| FAQ resmi kampus | Perlu disiapkan | Data pada `knowledge/faqs.sample.json` hanya untuk demonstrasi |
-
-Project ini tidak menggunakan AI Assist tawk.to. tawk.to ditempatkan sebagai kanal lanjutan untuk percakapan dengan agen manusia setelah backend memutuskan bahwa jawaban otomatis tidak layak diberikan.
-
-Perubahan Fase 2 harus melewati independent delta review, smoke test lokal, dan validasi migration pada PostgreSQL disposable sebelum dipertimbangkan untuk rollout environment.
-
-## Arsitektur
+## Arsitektur singkat
 
 ```mermaid
-flowchart TD
-    A["Visitor"] --> B["POST /api/chat"]
-    B --> C["Gemini query embedding"]
-    C --> D["Supabase match_faq"]
-    D --> E{"FAQ melewati threshold?"}
-    E -- Tidak --> H["HANDOFF contract"]
-    E -- Ya --> F["Qwen3 grounded generation"]
-    F --> G{"JSON dan faq_id valid?"}
-    G -- Ya --> I["ANSWER + sources"]
-    G -- Tidak --> H
+flowchart LR
+    U["Visitor"] --> API["Node.js / Express"]
+    API --> GE["Gemini Embedding"]
+    GE --> DB["Supabase PostgreSQL + pgvector"]
+    DB --> RPC["match_faq"]
+    RPC --> CF["Cloudflare LLM"]
+    CF --> V{"JSON dan faq_id valid?"}
+    V -- Ya --> A["ANSWER + sources"]
+    V -- Tidak --> H["HANDOFF"]
 ```
 
-Alur pemrosesan terdiri dari dua pemeriksaan:
+Pertanyaan dibuat menjadi embedding 1536 dimensi, lalu RPC `match_faq` mencari
+FAQ `published`. LLM hanya menerima hasil retrieval. Respons `ANSWER` diterima
+jika seluruh `faq_id` berasal dari hasil tersebut; kondisi lain menghasilkan
+`HANDOFF`. Penjelasan lengkap ada di [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-1. Supabase hanya mengembalikan FAQ berstatus `published` dengan cosine similarity yang mencapai `MATCH_THRESHOLD`.
-2. LLM wajib mengembalikan tepat satu object JSON valid. Untuk keputusan `ANSWER`, seluruh `faq_id` harus unik, berformat UUID, dan terdapat pada hasil retrieval; satu ID yang tidak valid atau tidak dikenal menyebabkan `HANDOFF`.
+## Endpoint penting
 
-Jika salah satu pemeriksaan gagal, backend mengembalikan `HANDOFF`. Ketika tidak ada FAQ yang relevan, model generatif tidak dipanggil.
-
-## Teknologi
-
-| Lapisan | Implementasi |
-|---|---|
-| Runtime | Node.js 24 |
-| HTTP API | Express 5 |
-| Validasi | Zod |
-| Vector database | Supabase PostgreSQL + pgvector |
-| Embedding | Google Gemini `gemini-embedding-001` |
-| Model generatif | `@cf/qwen/qwen3-30b-a3b-fp8` melalui Cloudflare Workers AI |
-| Frontend demo | HTML, CSS, dan JavaScript tanpa framework |
-| Deployment | Vercel |
-| Human handoff | Kontrak integrasi tawk.to |
-
-## Struktur repository
-
-```text
-.
-├── docs/                         Dokumentasi arsitektur
-├── knowledge/                    Sumber FAQ berbentuk JSON
-├── public/                       Antarmuka demo
-├── scripts/                      Script ingest FAQ
-├── src/
-│   ├── config/                   Validasi environment
-│   ├── middleware/               Admin auth dan error handler
-│   ├── prompts/                  Aturan jawaban berbasis FAQ
-│   ├── repositories/             Akses data Supabase
-│   ├── routes/                   Route chat dan administrasi FAQ
-│   ├── services/                 Embedding, retrieval, ingest, dan LLM
-│   └── utils/                    Parser dan error internal
-├── supabase/migrations/          Skema pgvector dan RPC retrieval
-├── test/                         Unit dan integration tests
-├── index.js                      Entry point Vercel
-└── package.json
-```
-
-`src/app.factory.js` membentuk aplikasi Express agar dapat diuji tanpa provider nyata. `src/server.js` menyusun dependency produksi dan hanya membuka port ketika aplikasi tidak berjalan di Vercel.
-
-## Persyaratan
-
-- Node.js 24.x;
-- project Supabase dengan akses SQL Editor;
-- Gemini API key;
-- akun Cloudflare dengan Workers AI aktif;
-- kredensial tawk.to hanya diperlukan oleh tim yang memasang widget handoff.
-
-## Konfigurasi environment
-
-Buat file `.env` pada root project. File ini sudah dikecualikan melalui `.gitignore` dan tidak boleh dikirim ke repository.
-
-```env
-NODE_ENV=development
-PORT=3000
-ALLOWED_ORIGINS=http://localhost:3000
-CHATBOT_API_URL=http://localhost:3000
-ADMIN_INGEST_KEY=GANTI_DENGAN_KUNCI_ACAK_MINIMAL_20_KARAKTER
-ADMIN_APP_ORIGIN=http://localhost:3000
-ADMIN_REFRESH_COOKIE_MAX_AGE_SECONDS=604800
-ADMIN_LOGIN_RATE_LIMIT=10
-
-SUPABASE_URL=https://PROJECT_ID.supabase.co
-SUPABASE_PUBLISHABLE_KEY=SUPABASE_PUBLISHABLE_KEY
-SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY
-
-GEMINI_API_KEY=GEMINI_API_KEY
-GEMINI_EMBEDDING_MODEL=gemini-embedding-001
-
-CLOUDFLARE_ACCOUNT_ID=CLOUDFLARE_ACCOUNT_ID
-CLOUDFLARE_API_TOKEN=CLOUDFLARE_API_TOKEN
-CLOUDFLARE_LLM_MODEL=@cf/qwen/qwen3-30b-a3b-fp8
-
-MATCH_THRESHOLD=0.65
-MATCH_COUNT=3
-MAX_CHAT_HISTORY=6
-CS_FALLBACK_MESSAGE=Maaf, informasi tersebut belum tersedia dalam FAQ kampus. Saya akan mengarahkan Anda ke petugas layanan kampus.
-```
-
-`CHATBOT_API_URL` hanya digunakan oleh `scripts/ingest-file.js`. Nilai tersebut tidak diperlukan oleh runtime Vercel. `ADMIN_APP_ORIGIN` harus berupa origin kanonis yang sama persis dengan origin halaman dashboard, tanpa slash akhir, path, query, fragment, atau credential, karena dipakai untuk memvalidasi seluruh mutasi autentikasi.
-
-Kunci admin dapat dibuat dengan Node.js:
-
-```bash
-node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
-```
-
-Gunakan nilai `ADMIN_INGEST_KEY` yang sama pada backend dan script ingest. Jangan gunakan Supabase personal access token sebagai `SUPABASE_SERVICE_ROLE_KEY`.
-
-## Menjalankan secara lokal
-
-1. Instal dependency:
-
-   ```bash
-   npm install
-   ```
-
-2. Buat dan isi file `.env` berdasarkan daftar konfigurasi di atas.
-
-3. Jalankan migration `supabase/migrations/001_faq_pgvector.sql`,
-   `supabase/migrations/002_admin_auth.sql`, lalu
-   `supabase/migrations/003_faq_documents_service_role_privileges.sql`,
-   `supabase/migrations/004_faq_documents_archive_only_privileges.sql`, lalu
-   `supabase/migrations/005_faq_documents_version_invariant.sql` melalui proses
-   migration resmi. Migration `004` dan `005` masih belum diterapkan pada
-   environment mana pun selama checkpoint lokal Fase 2.
-
-4. Jalankan server:
-
-   ```bash
-   npm run dev
-   ```
-
-5. Buka `http://localhost:3000` atau periksa endpoint health:
-
-   ```bash
-   curl http://localhost:3000/api/health
-   ```
-
-Respons health menyertakan model embedding, dimensi embedding, dan model generatif yang aktif.
-
-## Mengelola FAQ
-
-FAQ disimpan pada tabel `public.faq_documents`. Kolom `faq_key` bersifat unik sehingga ingest ulang dengan key yang sama memperbarui record melalui mekanisme upsert.
-
-Format satu FAQ:
-
-```json
-{
-  "faq_key": "jadwal-perkuliahan",
-  "question": "Di mana mahasiswa dapat melihat jadwal perkuliahan?",
-  "answer": "Jadwal tersedia pada sistem informasi akademik kampus.",
-  "category": "akademik",
-  "source": "Panduan Akademik 2026",
-  "metadata": {
-    "tags": ["jadwal", "kuliah"]
-  },
-  "status": "published",
-  "version": 1
-}
-```
-
-Nilai `status` yang didukung adalah `draft`, `published`, dan `archived`. Hanya FAQ `published` yang dapat muncul pada hasil retrieval.
-
-Dengan server aktif, ingest file JSON dari terminal lain:
-
-```bash
-npm run ingest -- knowledge/faqs.sample.json
-```
-
-File `knowledge/faqs.sample.json` saat ini berisi data demonstrasi berstatus `published` dengan `source: "contoh-faq"`. Ganti jawaban, sumber, URL, dan prosedur dengan dokumen resmi kampus sebelum digunakan sebagai layanan publik.
-
-## API
-
-| Method | Endpoint | Fungsi | Otorisasi |
+| Method | Endpoint | Akses | Fungsi |
 |---|---|---|---|
-| `GET` | `/api/health` | Memeriksa status dan konfigurasi model | Publik |
-| `POST` | `/api/chat` | Memproses pertanyaan visitor | Publik, maksimal 20 request/menit per client |
-| `POST` | `/api/ingest` | Membuat embedding dan melakukan upsert FAQ | Admin key |
-| `GET` | `/api/faqs` | Mengambil daftar FAQ | Admin key |
-| `POST` | `/api/faqs` | Membuat embedding dan melakukan upsert FAQ | Admin key |
-| `DELETE` | `/api/faqs/:id` | Mengubah status FAQ menjadi `archived` | Admin key |
-| `POST` | `/api/admin/auth/login` | Login Supabase Auth dan membuat cookie session | CSRF + exact origin |
-| `POST` | `/api/admin/auth/refresh` | Merotasi session admin | CSRF + exact origin |
-| `POST` | `/api/admin/auth/logout` | Revoke dan menghapus cookie session | CSRF + exact origin |
-| `GET` | `/api/admin/auth/session` | Memeriksa user dan membership admin | Session admin |
-| `GET` | `/api/admin/faqs` | List, search, filter, sort, pagination, dan total FAQ | Session admin |
-| `POST` | `/api/admin/faqs` | Membuat satu FAQ beserta embedding | Session admin + CSRF + exact origin |
-| `GET` | `/api/admin/faqs/:id` | Mengambil detail FAQ | Session admin |
-| `PUT` | `/api/admin/faqs/:id` | Memperbarui editable fields dengan optimistic concurrency | Session admin + CSRF + exact origin |
-| `PATCH` | `/api/admin/faqs/:id/status` | Mengubah lifecycle FAQ tanpa hard delete | Session admin + CSRF + exact origin |
+| `GET` | `/api/health` | Publik | Status runtime dan model |
+| `POST` | `/api/chat` | Publik | Retrieval dan jawaban grounded |
+| `GET` | `/api/admin/auth/session` | Session admin | Verifikasi sesi dan role |
+| `POST` | `/api/admin/auth/login` | CSRF + exact origin | Login Supabase Auth |
+| `POST` | `/api/admin/auth/refresh` | CSRF + exact origin | Rotasi sesi |
+| `POST` | `/api/admin/auth/logout` | CSRF + exact origin | Logout dan hapus cookie |
+| `GET` | `/api/admin/faqs` | Session admin | List, filter, sort, dan pagination |
+| `POST` | `/api/admin/faqs` | Session + CSRF | Membuat FAQ |
+| `GET` | `/api/admin/faqs/:id` | Session admin | Detail FAQ |
+| `PUT` | `/api/admin/faqs/:id` | Session + CSRF | Memperbarui FAQ |
+| `PATCH` | `/api/admin/faqs/:id/status` | Session + CSRF | Mengubah lifecycle FAQ |
 
-Endpoint FAQ/ingestion legacy menerima salah satu header berikut:
+Endpoint legacy `/api/faqs` dan `/api/ingest` memakai `ADMIN_INGEST_KEY` dan
+dipertahankan untuk proses ingest terkontrol. Detail operasi tersedia di
+[docs/OPERATIONS.md](docs/OPERATIONS.md).
 
-```http
-Authorization: Bearer ADMIN_INGEST_KEY
-```
+## Lifecycle FAQ
 
-atau:
+- `draft`: dapat ditinjau admin dan tidak ikut retrieval;
+- `published`: dapat ditemukan oleh `match_faq`;
+- `archived`: disembunyikan dari retrieval dan dapat dipulihkan ke `draft`.
 
-```http
-x-admin-key: ADMIN_INGEST_KEY
-```
+Aplikasi tidak menyediakan hard delete. Penghapusan dilakukan dengan mengubah
+status menjadi `archived`, sehingga audit dan pemulihan tetap mungkin. Role
+runtime `service_role` tidak mempunyai privilege `DELETE`; hard delete hanya
+boleh dilakukan melalui prosedur pemeliharaan khusus dengan backup, otorisasi,
+dan verifikasi terpisah.
 
-Contoh request chat:
+## Setup lokal
 
-```bash
-curl http://localhost:3000/api/chat \
-  -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"message":"Di mana saya melihat jadwal kuliah?","history":[]}'
-```
-
-Respons yang berhasil diverifikasi:
-
-```json
-{
-  "decision": "ANSWER",
-  "answer": "Jadwal perkuliahan dapat dilihat melalui sistem informasi akademik kampus.",
-  "confidence": "high",
-  "sources": [
-    {
-      "faq_id": "uuid",
-      "question": "Di mana mahasiswa dapat melihat jadwal perkuliahan?",
-      "similarity": 0.78
-    }
-  ],
-  "mode": "GROUNDED_LLM"
-}
-```
-
-Respons handoff:
-
-```json
-{
-  "decision": "HANDOFF",
-  "answer": "Informasi belum tersedia dalam FAQ kampus.",
-  "sources": [],
-  "handoff": {
-    "provider": "tawk.to",
-    "action": "OPEN_WIDGET",
-    "reason": "NO_RELEVANT_FAQ"
-  }
-}
-```
-
-Alasan handoff yang dapat dikembalikan oleh service chat:
-
-| Reason | Kondisi |
-|---|---|
-| `NO_RELEVANT_FAQ` | Tidak ada FAQ yang mencapai threshold |
-| `LLM_CONTEXT_INSUFFICIENT` | LLM menilai konteks belum cukup |
-| `LLM_RESPONSE_INVALID` | Respons model tidak dapat divalidasi |
-| `UNVERIFIED_LLM_CITATION` | Model mengutip `faq_id` di luar hasil retrieval |
-| `LLM_SERVICE_UNAVAILABLE` | Provider generatif gagal atau timeout |
-| `SERVICE_UNAVAILABLE` | Terjadi kegagalan teknis lain pada pipeline chat |
-
-## Batas integrasi tawk.to
-
-Backend telah menyediakan kontrak berikut ketika percakapan perlu dilanjutkan oleh manusia:
-
-```json
-{
-  "provider": "tawk.to",
-  "action": "OPEN_WIDGET"
-}
-```
-
-Frontend juga telah menyiapkan pemanggilan:
-
-```js
-window.Tawk_API.maximize();
-```
-
-Namun, repository ini belum memuat embed code atau Property ID tawk.to. Integrator website perlu memasang snippet widget resmi pada halaman target. Setelah snippet tersedia, tombol **Hubungi customer service** dapat membuka widget melalui fungsi yang sudah ada di `public/app.js`.
-
-## Pengujian
-
-Jalankan seluruh test dengan:
+Persyaratan: Node.js 24 dan npm yang membaca `package-lock.json`.
 
 ```bash
+npm ci
+cp .env.example .env
+npm run dev
+```
+
+Isi `.env` dengan project dan credential lingkungan lokal/non-Production. Jangan
+menyalin nilai Vercel atau credential Supabase Production. Aplikasi berjalan pada
+`http://localhost:3000` secara default.
+
+```bash
+curl http://localhost:3000/api/health
 npm test
 ```
 
-Suite pengujian memeriksa:
+Suite penuh terakhir lulus 298/298 pada Node.js 24 sebelum rilis Production.
+Perubahan dokumentasi tidak memerlukan pengulangan suite tersebut.
 
-- endpoint health, chat, halaman demo, dan autentikasi admin;
-- keputusan `ANSWER` dengan `faq_id` terverifikasi;
-- handoff untuk FAQ yang tidak relevan, respons invalid, kutipan palsu, konteks tidak cukup, dan kegagalan provider;
-- penggunaan task type `RETRIEVAL_DOCUMENT` dan `RETRIEVAL_QUERY`;
-- validasi embedding 1536 dimensi;
-- proses ingest dan penyimpanan FAQ.
+Setup container lokal dijelaskan di `docs/DOCKER.md` pada branch handoff Docker
+lokal. File tersebut sengaja tidak ada pada branch Production karena branch
+Docker tidak dipush.
 
-Provider eksternal dan database diganti dengan mock pada test otomatis. Verifikasi koneksi nyata dilakukan melalui pengujian deployment dan inspeksi respons `/api/chat`.
+## Migration database
 
-## Deployment ke Vercel
+Migration harus dijalankan berurutan melalui Supabase CLI resmi:
 
-1. Hubungkan repository GitHub ke Vercel.
-2. Pilih preset **Express** dengan root directory `./`.
-3. Tambahkan seluruh environment variable runtime. `PORT` dan `CHATBOT_API_URL` tidak perlu ditambahkan ke Vercel.
-4. Isi `ALLOWED_ORIGINS` dengan origin produksi tanpa trailing slash, misalnya:
+1. `001_faq_pgvector.sql` — extension vector, `faq_documents`, HNSW, RLS, dan RPC;
+2. `002_admin_auth.sql` — allowlist `admin_users`;
+3. `003_faq_documents_service_role_privileges.sql` — reset ACL deterministik;
+4. `004_faq_documents_archive_only_privileges.sql` — cabut `DELETE` dari runtime;
+5. `005_faq_documents_version_invariant.sql` — version dan `updated_at` via trigger.
 
-   ```env
-   ALLOWED_ORIGINS=https://campus-faq-chatbot-nu.vercel.app
-   ```
+Production telah memiliki history `001–005`. Jangan menjalankan ulang migration
+atau melakukan repair history tanpa audit katalog, backup tervalidasi, rehearsal,
+dan persetujuan perubahan database.
 
-5. Deploy branch `main`.
-6. Verifikasi `/api/health`, satu pertanyaan relevan, dan satu pertanyaan di luar knowledge base.
+## Deployment dan pemisahan environment
 
-URL preview Vercel memiliki origin berbeda dari domain produksi dan akan ditolak jika tidak tercantum pada `ALLOWED_ORIGINS`.
+Vercel mendeploy branch `main`. Environment Production harus memakai project
+Supabase Production dan exact canonical origin; Preview/staging memakai project
+serta nilai terpisah. Jangan menyalin fixture, key, URL database, atau user admin
+antar-environment. Runbook deploy, smoke test, dan rollback ada di
+[docs/OPERATIONS.md](docs/OPERATIONS.md).
 
-## Keamanan dan batasan
+## Dokumentasi
 
-- `SUPABASE_SERVICE_ROLE_KEY`, Gemini API key, Cloudflare token, dan admin key hanya boleh tersedia pada backend.
-- Dashboard `/admin` menggunakan Supabase Auth melalui backend-for-frontend. Access token dan refresh token hanya disimpan pada cookie HttpOnly dan tidak dikembalikan melalui JSON.
-- User Supabase Auth harus tercantum sebagai `admin` aktif pada `public.admin_users`; dashboard tidak menyediakan public signup atau manajemen admin.
-- Row Level Security aktif. Hak tabel dan eksekusi RPC untuk `anon` serta `authenticated` dicabut pada migration.
-- Forward migration `003` mereset privilege luas/default pada `public.faq_documents`; migration `004` kemudian mempersempit runtime `service_role` menjadi hanya `SELECT`, `INSERT`, dan `UPDATE` untuk kontrak archive-only.
-- Forward migration `005` memasang invariant database agar setiap update `public.faq_documents` menaikkan `version` tepat satu dan menggunakan waktu database untuk `updated_at`; migration ini masih menunggu review dan belum diterapkan.
-- Endpoint FAQ legacy menggunakan perbandingan constant-time terhadap `ADMIN_INGEST_KEY`.
-- API menggunakan Helmet, allowlist CORS, validasi Zod, batas request JSON 1 MB, dan rate limit pada endpoint chat.
-- Riwayat percakapan tidak disimpan oleh backend; browser hanya mengirim bagian terakhir dari riwayat aktif.
-- Riwayat dari client tetap diperlakukan sebagai input tidak tepercaya. Validasi role, panjang, dan format tidak membuktikan bahwa isi atau urutan history autentik.
-- Test otomatis tidak mengukur ketersediaan, kuota, latensi, maupun perubahan kebijakan provider eksternal.
-- Dashboard menyediakan autentikasi Fase 1 dan implementasi lokal Core FAQ Management Fase 2 yang masih menunggu delta review. Audit lengkap, import, retrieval tester, statistik, MFA, dan sinkronisasi transkrip tawk.to belum tersedia.
-- Threshold `0.65` telah digunakan pada demonstrasi, tetapi tetap perlu dievaluasi ulang menggunakan variasi pertanyaan dan FAQ resmi kampus.
+- [Admin Guide](docs/ADMIN_GUIDE.md)
+- [Operations Runbook](docs/OPERATIONS.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Admin authentication security](docs/ADMIN_AUTH.md)
 
-## Referensi teknis
+## Known limitations
 
-- [Gemini Embeddings](https://ai.google.dev/gemini-api/docs/embeddings)
-- [Supabase pgvector](https://supabase.com/docs/guides/ai/vector-columns)
-- [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/)
-- [Vercel Express](https://vercel.com/docs/frameworks/backend/express)
-- [tawk.to JavaScript API](https://developer.tawk.to/jsapi/)
-
+- widget/properti tawk.to belum disertakan; aplikasi hanya menyediakan kontrak
+  `OPEN_WIDGET` untuk handoff;
+- MFA admin belum diterapkan;
+- limiter login memakai memory store per instance serverless, bukan limiter global;
+- audit trail perubahan FAQ, bulk import, analytics, dan retrieval tester belum ada;
+- kualitas retrieval bergantung pada FAQ resmi dan evaluasi threshold;
+- test otomatis memakai mock dan tidak mengukur kuota, latensi, atau perubahan
+  kebijakan provider eksternal.
