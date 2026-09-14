@@ -3,17 +3,31 @@
 ## Batas sistem
 
 ```mermaid
-flowchart TD
-    B["Browser"] -->|"POST /api/chat"| N["Node.js / Express"]
-    N -->|"RETRIEVAL_QUERY"| G["Gemini Embedding 1536"]
-    N -->|"match_faq"| S["Supabase PostgreSQL + pgvector"]
-    S --> N
-    N -->|"Konteks FAQ"| C["Cloudflare Workers AI"]
-    C --> N
-    N -->|"ANSWER atau HANDOFF"| B
-    A["Admin Console"] -->|"BFF cookies + CSRF"| N
-    N -->|"Supabase Auth"| AU["Supabase Auth"]
-    N -->|"admin_users / faq_documents"| S
+flowchart LR
+    subgraph users["Pengguna"]
+        direction TB
+        chat["Chat pengguna"]
+        admin["Admin Console"]
+    end
+
+    subgraph vercel["Batas aplikasi Vercel"]
+        bff["Node.js / Express BFF"]
+    end
+
+    subgraph external["Layanan terkelola eksternal"]
+        direction TB
+        gemini["Gemini Embedding 1536"]
+        database["Supabase PostgreSQL + pgvector"]
+        auth["Supabase Auth"]
+        cloudflare["Cloudflare Workers AI"]
+    end
+
+    chat -->|"Chat API"| bff
+    admin -->|"Admin API dan CSRF"| bff
+    bff -->|"Embedding"| gemini
+    bff -->|"Retrieval dan FAQ CRUD"| database
+    bff -->|"Validasi sesi"| auth
+    bff -->|"Grounded answer"| cloudflare
 ```
 
 | Komponen | Tanggung jawab | Batas keamanan |
