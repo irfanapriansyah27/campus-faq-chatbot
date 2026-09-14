@@ -31,6 +31,13 @@ export class GeminiEmbeddingService {
             `Dimensi embedding harus ${EMBEDDING_DIMENSION}, tetapi Gemini mengembalikan ${vector?.length ?? 0}.`
           );
         }
+        for (let index = 0; index < vector.length; index += 1) {
+          if (!Object.hasOwn(vector, index)
+            || typeof vector[index] !== 'number'
+            || !Number.isFinite(vector[index])) {
+            throw new Error('Embedding memuat nilai yang tidak valid.');
+          }
+        }
       }
 
       return vectors;
@@ -53,4 +60,3 @@ export class GeminiEmbeddingService {
 }
 
 export { EMBEDDING_DIMENSION };
-

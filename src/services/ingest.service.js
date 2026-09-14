@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { buildCanonicalFaqContent, faqMetadataSchema } from '../domain/faq.js';
 
 export const faqInputSchema = z.object({
   faq_key: z.string().trim().min(2).max(100).regex(/^[a-z0-9][a-z0-9_-]*$/),
@@ -6,7 +7,7 @@ export const faqInputSchema = z.object({
   answer: z.string().trim().min(5).max(5000),
   category: z.string().trim().min(2).max(100).default('umum'),
   source: z.string().trim().min(1).max(500).default('admin'),
-  metadata: z.record(z.string(), z.unknown()).default({}),
+  metadata: faqMetadataSchema.default({}),
   status: z.enum(['draft', 'published', 'archived']).default('published'),
   version: z.coerce.number().int().positive().default(1)
 });
@@ -36,8 +37,8 @@ export class IngestService {
 
   async ingest(rawFaqs) {
     const faqs = faqBatchSchema.parse(rawFaqs);
-    const embeddingInputs = faqs.map((faq) =>
-      `Pertanyaan: ${faq.question}\nJawaban: ${faq.answer}`
+    const embeddingInputs = faqs.map(({ question, answer }) =>
+      buildCanonicalFaqContent({ question, answer })
     );
     const embeddings = await this.embeddingService.createDocumentEmbeddings(embeddingInputs);
     const records = faqs.map((faq, index) => ({

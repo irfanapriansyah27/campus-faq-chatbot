@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { createApp } from '../src/app.factory.js';
+import { IngestService } from '../src/services/ingest.service.js';
 
 let server;
 let baseUrl;
@@ -27,9 +28,10 @@ const chatService = {
   }
 };
 
+let ingestImplementation = async (faqs) => faqs;
 const ingestService = {
   async ingest(faqs) {
-    return faqs;
+    return ingestImplementation(faqs);
   }
 };
 
@@ -161,6 +163,57 @@ test('endpoint admin menolak permintaan tanpa kunci', async () => {
   const response = await fetch(`${baseUrl}/api/faqs`);
 
   assert.equal(response.status, 401);
+});
+
+test('legacy ingest menolak metadata invalid dengan contract aman dan zero provider/upsert', async () => {
+  let providerCalls = 0;
+  let upsertCalls = 0;
+  let metadata = 'detail-sensitif-tidak-boleh-bocor';
+  for (let depth = 0; depth < 10; depth += 1) {
+    metadata = { nested: metadata };
+  }
+  const actualIngestService = new IngestService({
+    embeddingService: {
+      async createDocumentEmbeddings() {
+        providerCalls += 1;
+        return [];
+      }
+    },
+    faqRepository: {
+      async upsertFaqs() {
+        upsertCalls += 1;
+        return [];
+      }
+    }
+  });
+  ingestImplementation = actualIngestService.ingest.bind(actualIngestService);
+
+  try {
+    const response = await fetch(`${baseUrl}/api/faqs`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-key': config.ADMIN_INGEST_KEY
+      },
+      body: JSON.stringify({ faqs: [{
+        faq_key: 'metadata-invalid',
+        question: 'Bagaimana metadata FAQ divalidasi?',
+        answer: 'Metadata divalidasi sebelum embedding dan penyimpanan.',
+        metadata
+      }] })
+    });
+    const payload = await response.json();
+    const serialized = JSON.stringify(payload);
+
+    assert.equal(response.status, 400);
+    assert.equal(payload.error.code, 'VALIDATION_ERROR');
+    assert.equal(payload.error.message, 'Data permintaan tidak valid.');
+    assert.equal(serialized.includes('detail-sensitif-tidak-boleh-bocor'), false);
+    assert.equal(providerCalls, 0);
+    assert.equal(upsertCalls, 0);
+  } finally {
+    ingestImplementation = async (faqs) => faqs;
+  }
 });
 
 test('CORS mengizinkan origin yang terdaftar', async () => {
